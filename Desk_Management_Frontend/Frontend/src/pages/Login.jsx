@@ -1,76 +1,7 @@
-// import { useState } from "react";
-
-// const Login = () => {
-//   const [email, setEmail] = useState("");
-//   const [password, setPassword] = useState("");
-//   const [role, setRole] = useState("");
-
-//   const handleSubmit = (e) => {
-//     e.preventDefault();
-//     console.log({ email, password, role });
-//   };
-
-//   return (
-//     <div className="login-box">
-//       <div className="logo">
-//         <h1>Desk Management System</h1>
-//         <p>Manage office desks efficiently</p>
-//       </div>
-
-//       <form onSubmit={handleSubmit}>
-//         <div className="form-group">
-//           <label>Email Address</label>
-//           <input
-//             type="email"
-//             placeholder="Enter your email"
-//             value={email}
-//             onChange={(e) => setEmail(e.target.value)}
-//             required
-//           />
-//         </div>
-
-//         <div className="form-group">
-//           <label>Password</label>
-//           <input
-//             type="password"
-//             placeholder="Enter your password"
-//             value={password}
-//             onChange={(e) => setPassword(e.target.value)}
-//             required
-//           />
-//         </div>
-
-//         <div className="form-group">
-//           <label>Select Role</label>
-//           <select
-//             value={role}
-//             onChange={(e) => setRole(e.target.value)}
-//             required
-//           >
-//             <option value="">Choose your role</option>
-//             <option value="employee">Employee</option>
-//             <option value="admin">Admin / Manager</option>
-//             <option value="itsupport">IT Support</option>
-//           </select>
-//         </div>
-
-//         <button type="submit" className="btn">
-//           Sign In
-//         </button>
-//       </form>
-
-//       <div className="forgot-password">
-//         <a href="#">Forgot Password?</a>
-//       </div>
-//     </div>
-//   );
-// };
-
-// export default Login;
-
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { ToastContainer, toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const Login = () => {
   const navigate = useNavigate();
@@ -84,13 +15,28 @@ const Login = () => {
 
     if (role === "employee") {
       navigate("/employee-dashboard");
-    }
-    else if (role == "admin"){
+    } else if (role === "admin") {
       navigate("/admin-dashboard");
+    } else if (role === "itsupport") {
+      navigate("/itsupport-dashboard");
     }
-    else if (role === "itsupport") {
-    navigate("/itsupport-dashboard");
-  }
+  };
+
+  // ✅ Forgot password handler
+  const handleForgotPassword = () => {
+    if (!email) {
+      toast.error("Please enter your email first");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    // Simulated success (API call can be added later)
+    toast.success(`Password reset link sent to ${email}`);
   };
 
   return (
@@ -157,10 +103,17 @@ const Login = () => {
           </button>
         </form>
 
-        <p className="text-center text-sm mt-4 text-indigo-600 cursor-pointer">
+        {/* ✅ Forgot password */}
+        <p
+          className="text-center text-sm mt-4 text-indigo-600 cursor-pointer"
+          onClick={handleForgotPassword}
+        >
           Forgot Password?
         </p>
       </div>
+
+      {/* Toast container */}
+      <ToastContainer position="top-right" autoClose={3000} />
     </div>
   );
 };
