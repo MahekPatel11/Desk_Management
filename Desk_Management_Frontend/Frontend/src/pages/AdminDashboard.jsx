@@ -1,13 +1,6 @@
-import { useState } from "react";
+import { useState, useContext, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-
-const desksData = [
-  { desk: "205", floor: "Floor 2", status: "Assigned", user: "John Doe", date: "Jan 15, 2026", employeeId: "EMP-2156", department: "Engineering" },
-  { desk: "206", floor: "Floor 2", status: "Available", user: "—", date: "Jan 10, 2026" },
-  { desk: "112", floor: "Floor 1", status: "Maintenance", user: "—", date: "Jan 20, 2026" },
-  { desk: "301", floor: "Floor 3", status: "Assigned", user: "Emma Wilson", date: "Jan 18, 2026", employeeId: "EMP-2234", department: "Marketing" },
-  { desk: "302", floor: "Floor 3", status: "Available", user: "—", date: "Jan 12, 2026" }
-];
+import { DeskContext } from "./DeskContext";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -15,10 +8,87 @@ const AdminDashboard = () => {
   const [status, setStatus] = useState("All");
   const [floor, setFloor] = useState("All");
 
-  const filteredDesks = desksData.filter((d) => {
+  const { desks, assignments, employees, fetchDesks, fetchAssignments, fetchEmployees } = useContext(DeskContext);
+  const [userProfile, setUserProfile] = useState(null);
+
+  // Get user profile from JWT token
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(window.atob(base64));
+
+      setUserProfile({
+        name: payload.full_name || "Admin",
+        role: payload.role === "ADMIN" ? "Administrator" : payload.role
+      });
+    } catch (e) {
+      console.error("Error decoding token", e);
+      navigate("/login");
+    }
+  }, [navigate]);
+
+  // Fetch latest data on mount
+  useEffect(() => {
+    fetchDesks();
+    fetchAssignments();
+    fetchEmployees();
+  }, []);
+
+  // Calculate dynamic stats from real data
+  const stats = useMemo(() => {
+    const totalDesks = desks.length;
+    const assignedDesks = desks.filter(d => d.current_status === "ASSIGNED").length;
+    const availableDesks = desks.filter(d => d.current_status === "AVAILABLE").length;
+    const maintenanceDesks = desks.filter(d => d.current_status === "MAINTENANCE").length;
+    const inactiveDesks = desks.filter(d => d.current_status === "INACTIVE").length;
+
+    return {
+      total: totalDesks,
+      assigned: assignedDesks,
+      available: availableDesks,
+      maintenance: maintenanceDesks,
+      inactive: inactiveDesks
+    };
+  }, [desks]);
+
+  // Process desks with assignment data
+  const processedDesks = desks.map(desk => {
+    const activeAssignment = assignments.find(a =>
+      a.desk_number === desk.desk_number &&
+      (a.released_date === null || a.released_date === "None")
+    );
+
+    return {
+      desk: desk.desk_number,
+      floor: desk.floor,
+      status: desk.current_status === "ASSIGNED" ? "Assigned" :
+        desk.current_status === "AVAILABLE" ? "Available" :
+          desk.current_status === "MAINTENANCE" ? "Maintenance" :
+            desk.current_status === "INACTIVE" ? "Inactive" : desk.current_status,
+      user: activeAssignment ? (activeAssignment.employee_name || activeAssignment.employee_code) : "—",
+      date: activeAssignment ? activeAssignment.assigned_date : (desk.updated_at ? desk.updated_at.split('T')[0] : "—"),
+      department: activeAssignment ? (activeAssignment.department || "—") : "—",
+      employeeId: activeAssignment ? activeAssignment.employee_code : "—",
+      employeeDbId: activeAssignment ? activeAssignment.employee_id : null,
+      deskDbId: desk.id,
+      assignedBy: activeAssignment ? activeAssignment.assigned_by : (desk.current_status === "AVAILABLE" ? "—" : "System"),
+      notes: activeAssignment ? activeAssignment.notes : "",
+      ...desk
+    };
+  });
+
+  // Filter desks based on search and filters
+  const filteredDesks = processedDesks.filter((d) => {
     const matchSearch =
       d.desk.includes(search) ||
-      d.user.toLowerCase().includes(search.toLowerCase()) ||
+      (d.user && d.user.toLowerCase().includes(search.toLowerCase())) ||
       d.floor.toLowerCase().includes(search.toLowerCase());
     const matchStatus = status === "All" || d.status === status;
     const matchFloor = floor === "All" || d.floor === floor;
@@ -37,8 +107,8 @@ const AdminDashboard = () => {
 
           <div className="flex items-center gap-4 text-right">
             <div>
-              <div className="font-semibold">Sarah Johnson</div>
-              <div className="text-xs text-[#7f8c8d]">Admin / Manager</div>
+              <div className="font-semibold">{userProfile ? userProfile.name : "Loading..."}</div>
+              <div className="text-xs text-[#7f8c8d]">{userProfile ? userProfile.role : "Admin"}</div>
             </div>
             <button
               onClick={() => navigate("/")}
@@ -49,13 +119,14 @@ const AdminDashboard = () => {
           </div>
         </nav>
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
+        {/* Stats - Now Dynamic */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
           {[
-            ["245", "Total Desks", "🪑", "bg-blue-100 text-blue-600"],
-            ["189", "Assigned Desks", "✓", "bg-green-100 text-green-600"],
-            ["42", "Available Desks", "○", "bg-purple-100 text-purple-600"],
-            ["14", "Maintenance", "⚠", "bg-orange-100 text-orange-600"]
+            [stats.total.toString(), "Total Desks", "🪑", "bg-blue-100 text-blue-600"],
+            [stats.assigned.toString(), "Assigned Desks", "✓", "bg-green-100 text-green-600"],
+            [stats.available.toString(), "Available Desks", "○", "bg-purple-100 text-purple-600"],
+            [stats.maintenance.toString(), "Maintenance", "⚠", "bg-orange-100 text-orange-600"],
+            [stats.inactive.toString(), "Inactive", "🚫", "bg-red-100 text-red-600"]
           ].map(([value, label, icon, color], i) => (
             <div key={i} className="bg-white p-6 rounded-xl shadow">
               <div className="flex justify-between items-center">
@@ -71,12 +142,12 @@ const AdminDashboard = () => {
           ))}
         </div>
 
-        {/* Desk Inventory */}
-        <div className="bg-white p-8 rounded-xl shadow">
+        {/* Desk Inventory - Now Dynamic */}
+        <div className="bg-white p-2 rounded-xl shadow">
           <div className="flex justify-between items-center border-b pb-5 mb-6">
             <h2 className="text-xl font-bold">Desk Inventory</h2>
             <button
-              className="px-8 py-4 bg-[#667eea] text-white rounded-md font-semibold text-base"
+              className="px-8 py-2 bg-[#667eea] text-white rounded-md font-semibold text-base"
               onClick={() => navigate("/assign-desk", { state: { mode: "assign" } })}
             >
               + Assign Desk
@@ -101,6 +172,7 @@ const AdminDashboard = () => {
               <option>Available</option>
               <option>Assigned</option>
               <option>Maintenance</option>
+              <option>Inactive</option>
             </select>
 
             <select
@@ -114,7 +186,7 @@ const AdminDashboard = () => {
             </select>
           </div>
 
-          {/* Table */}
+          {/* Table - Now Dynamic */}
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-100">
@@ -134,6 +206,7 @@ const AdminDashboard = () => {
                         ${d.status === "Assigned" && "bg-blue-100 text-blue-700"}
                         ${d.status === "Available" && "bg-green-100 text-green-700"}
                         ${d.status === "Maintenance" && "bg-yellow-100 text-yellow-700"}
+                        ${d.status === "Inactive" && "bg-red-100 text-red-700"}
                       `}>
                         {d.status}
                       </span>
@@ -141,7 +214,7 @@ const AdminDashboard = () => {
                     <td className="p-3">{d.user}</td>
                     <td className="p-3">{d.date}</td>
                     <td className="p-3 space-x-2 flex flex-wrap">
-                      {/* VIEW button → only view */}
+                      {/* VIEW button */}
                       <button
                         onClick={() => navigate("/admin-details", { state: d })}
                         className="px-5 py-2 bg-blue-200 text-blue-800 rounded-md text-sm font-semibold"
@@ -149,51 +222,45 @@ const AdminDashboard = () => {
                         View
                       </button>
 
-                      {/* ASSIGN / REASSIGN / UPDATE → open assign-desk form */}
-                        <button
-                        disabled={d.status === "Maintenance"}
+                      {/* ASSIGN / REASSIGN / UPDATE button */}
+                      <button
+                        disabled={d.status === "Maintenance" || d.status === "Inactive"}
                         onClick={() => {
-                            if (d.status === "Maintenance") return;
+                          if (d.status === "Maintenance" || d.status === "Inactive") return;
 
-                            navigate("/assign-desk", {
+                          navigate("/assign-desk", {
                             state: {
-                                mode:
-                                d.status === "Available"
-                                    ? "assign"
-                                    : "reassign",
-                                desk: d.desk,
-                                floor: d.floor,
-                                status: d.status,
-                                user: d.assignedTo || "",
-                                department: d.department || "",
-                                employeeId: d.employeeId || "",
-                                date: d.date || ""
+                              mode: d.status === "Available" ? "assign" : "reassign",
+                              desk: d.deskDbId, // Passing database ID
+                              employee: d.employeeDbId, // Passing database ID
+                              floor: d.floor,
+                              status: d.status,
+                              department: d.department || "",
+                              employeeId: d.employeeId || "",
+                              date: d.date || ""
                             }
-                            });
+                          });
                         }}
                         className={`px-5 py-2 rounded-md text-sm font-semibold
-                            ${
-                            d.status === "Available"
-                                ? "bg-green-200 text-green-800"
-                                : d.status === "Assigned"
-                                ? "bg-orange-200 text-orange-800"
-                                : "bg-gray-300 text-black-500 cursor-not-allowed opacity-60"
-                            }`}
-                        >
-                        {d.status === "Available"
-                            ? "Assign"
+                            ${d.status === "Available"
+                            ? "bg-green-200 text-green-800"
                             : d.status === "Assigned"
+                              ? "bg-orange-200 text-orange-800"
+                              : "bg-gray-300 text-gray-400 cursor-not-allowed opacity-60"
+                          }`}
+                      >
+                        {d.status === "Available"
+                          ? "Assign"
+                          : d.status === "Assigned"
                             ? "Reassign"
                             : "Update"}
-                        </button>
-
+                      </button>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-
         </div>
       </div>
     </div>

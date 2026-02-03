@@ -10,20 +10,46 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (role === "employee") {
-      navigate("/employee-dashboard");
-    } else if (role === "admin") {
-      navigate("/admin-dashboard");
-    } else if (role === "itsupport") {
-      navigate("/itsupport-dashboard");
+    try {
+      const response = await fetch("/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password, role }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Login failed");
+      }
+
+      // Store token and role
+      localStorage.setItem("token", data.access_token);
+      localStorage.setItem("role", data.role);
+      localStorage.setItem("userEmail", email);
+
+      toast.success(`Welcome back! Logged in as ${data.role}`);
+
+      // Redirect based on role
+      if (data.role === "EMPLOYEE") {
+        navigate("/employee-dashboard");
+      } else if (data.role === "ADMIN") {
+        navigate("/admin-dashboard");
+      } else if (data.role === "IT_SUPPORT") {
+        navigate("/itsupport-dashboard");
+      }
+    } catch (error) {
+      toast.error(error.message);
     }
   };
 
-  // ✅ Forgot password handler
-  const handleForgotPassword = () => {
+  // ✅ Forgot password handler (JWT-based)
+  const handleForgotPassword = async () => {
     if (!email) {
       toast.error("Please enter your email first");
       return;
@@ -35,8 +61,31 @@ const Login = () => {
       return;
     }
 
-    // Simulated success (API call can be added later)
-    toast.success(`Password reset link sent to ${email}`);
+    try {
+      // Ask backend to create a short‑lived reset token for this email
+      const response = await fetch("/auth/forgot-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || "Failed to generate reset token");
+      }
+
+      const resetToken = data.reset_token;
+
+      toast.success("Reset token generated. Please set your new password.");
+
+      // Navigate to reset password page with token in query string
+      navigate(`/reset-password?token=${encodeURIComponent(resetToken)}`);
+    } catch (error) {
+      toast.error(error.message || "Something went wrong while generating reset token");
+    }
   };
 
   return (
@@ -89,9 +138,9 @@ const Login = () => {
               required
             >
               <option value="">Choose your role</option>
-              <option value="employee">Employee</option>
-              <option value="admin">Admin / Manager</option>
-              <option value="itsupport">IT Support</option>
+              <option value="EMPLOYEE">Employee</option>
+              <option value="ADMIN">Admin / Manager</option>
+              <option value="IT_SUPPORT">IT Support</option>
             </select>
           </div>
 

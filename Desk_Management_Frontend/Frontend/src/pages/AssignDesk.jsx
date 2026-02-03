@@ -1,32 +1,42 @@
 
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useContext } from "react";
-import { DeskContext } from "/home/cygnet/Desk_Management/Desk_Management_Frontend/Frontend/src/pages/DeskContext.jsx";
+import { DeskContext } from "./DeskContext";
 
-const employeesData = [
-  { name: "John Doe", employeeId: "EMP-2156", department: "Engineering" },
-  { name: "Emma Wilson", employeeId: "EMP-2234", department: "Marketing" },
-  { name: "David Smith", employeeId: "EMP-1998", department: "Sales" },
-  { name: "Lisa Anderson", employeeId: "EMP-2301", department: "HR" }
-];
-
-const desksData = [
-  { desk: "205", floor: "Floor 2", status: "Assigned" },
-  { desk: "206", floor: "Floor 2", status: "Available" },
-  { desk: "112", floor: "Floor 1", status: "Maintenance" },
-  { desk: "301", floor: "Floor 3", status: "Assigned" },
-  { desk: "302", floor: "Floor 3", status: "Available" }
-];
+// Removed hardcoded employeesData and desksData
+const employeesData = [];
+const desksData = [];
 
 const AssignDesk = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const state = location.state || {};
-  const { assignDesk } = useContext(DeskContext);
+  const { assignDesk, desks, employees, assignments } = useContext(DeskContext);
+  const [userProfile, setUserProfile] = useState(null);
+
+  // Get user profile from JWT token
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      setUserProfile({
+        name: payload.full_name || "Admin",
+        role: payload.role || "Admin"
+      });
+    } catch (e) {
+      console.error("Error decoding token", e);
+      navigate("/login");
+    }
+  }, [navigate]);
 
   const [desk, setDesk] = useState(state.desk || "");
   const [floor, setFloor] = useState(state.floor || "");
-  const [employee, setEmployee] = useState(state.user || "");
+  const [employee, setEmployee] = useState(state.employee || "");
   const [employeeId, setEmployeeId] = useState(state.employeeId || "");
   const [department, setDepartment] = useState(state.department || "");
   const [date, setDate] = useState(state.date || "");
@@ -34,39 +44,40 @@ const AssignDesk = () => {
   const [notes, setNotes] = useState(state.notes || "");
 
   useEffect(() => {
-    const emp = employeesData.find(e => e.name === employee);
+    // employee is the ID now
+    const emp = employees.find(e => e.id === employee);
     if (emp) {
-      setEmployeeId(emp.employeeId);
+      setEmployeeId(emp.employee_code);
       setDepartment(emp.department);
     } else {
       setEmployeeId("");
       setDepartment("");
     }
-  }, [employee]);
+  }, [employee, employees]);
 
   useEffect(() => {
-    const selectedDesk = desksData.find(d => d.desk === desk);
+    // desk is the ID now, but we search by number or ID depending on select val
+    // The select value will be desk ID
+    const selectedDesk = desks.find(d => d.id === desk);
     if (selectedDesk) setFloor(selectedDesk.floor);
     else setFloor("");
-  }, [desk]);
+  }, [desk, desks]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     // Push assignment to context
-    assignDesk({
-      desk,
-      floor,
-      assignedTo: employee,
-      employeeId,
-      department,
-      date,
-      type,
-      notes
+    const success = await assignDesk({
+      desk_id: desk, // State 'desk' actually holds the ID now
+      employee_id: employee, // State 'employee' actually holds the ID
+      assignment_type: type.toUpperCase(),
+      notes: notes,
+      date: date // Pass request date
     });
 
-    alert(`Desk ${desk} assigned to ${employee}`);
-    navigate("/admin-dashboard"); // redirect to admin dashboard
+    if (success) {
+      navigate("/admin-dashboard"); // redirect to admin dashboard
+    }
   };
 
   return (
@@ -76,8 +87,8 @@ const AssignDesk = () => {
           <div className="text-[22px] font-bold text-[#667eea]">🪑 Desk Management System</div>
           <div className="flex items-center gap-4 text-right">
             <div>
-              <div className="font-semibold">Sarah Johnson</div>
-              <div className="text-xs text-[#7f8c8d]">Admin / Manager</div>
+              <div className="font-semibold">{userProfile ? userProfile.name : "Loading..."}</div>
+              <div className="text-xs text-[#7f8c8d]">{userProfile ? userProfile.role : "Admin"}</div>
             </div>
             <button onClick={() => navigate("/")} className="px-5 py-2 bg-[#e74c3c] text-white rounded-md font-semibold text-sm">Logout</button>
           </div>
@@ -98,13 +109,24 @@ const AssignDesk = () => {
                 <label className="block mb-2 font-semibold text-[#34495e]">Desk Number *</label>
                 <select required value={desk} onChange={(e) => setDesk(e.target.value)} className="w-full p-3 border-2 border-[#e1e8ed] rounded-lg focus:outline-none focus:border-[#667eea] focus:ring-2 focus:ring-[#667eea]/20">
                   <option value="">Choose desk...</option>
-                  {desksData.map(d => (<option
-    key={d.desk}
-    value={d.desk}
-    disabled={d.status === "Maintenance"}
-  >
-    {d.desk} ({d.floor}) {d.status === "Maintenance" ? "- Under Maintenance" : ""}
-  </option>))}
+                  {desks.map(d => {
+                    const activeAssignment = assignments.find(a =>
+                      a.desk_number === d.desk_number &&
+                      (a.released_date === null || a.released_date === "None")
+                    );
+                    const employeeName = activeAssignment ? (activeAssignment.employee_name || activeAssignment.employee_code) : "";
+                    const isMaintenance = d.current_status === "MAINTENANCE";
+
+                    return (
+                      <option
+                        key={d.id}
+                        value={d.id}
+                        disabled={isMaintenance}
+                      >
+                        {d.desk_number} ({d.floor}) - {d.current_status} {employeeName ? `(${employeeName})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
               <div>
@@ -118,7 +140,7 @@ const AssignDesk = () => {
                 <label className="block mb-2 font-semibold text-[#34495e]">Select Employee *</label>
                 <select required value={employee} onChange={(e) => setEmployee(e.target.value)} className="w-full p-3 border-2 border-[#e1e8ed] rounded-lg focus:outline-none focus:border-[#667eea] focus:ring-2 focus:ring-[#667eea]/20">
                   <option value="">Choose employee...</option>
-                  {employeesData.map(emp => (<option key={emp.employeeId} value={emp.name}>{emp.name} ({emp.employeeId}) - {emp.department}</option>))}
+                  {employees.map(emp => (<option key={emp.id} value={emp.id}>{emp.name} ({emp.employee_code}) - {emp.department}</option>))}
                 </select>
               </div>
               <div>
@@ -133,14 +155,14 @@ const AssignDesk = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
               <div>
-                <label className="block mb-2 font-semibold text-[#34495e]">Assignment Date *</label>
-                <input type="date" required value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-3 border-2 border-[#e1e8ed] rounded-lg focus:outline-none focus:border-[#667eea] focus:ring-2 focus:ring-[#667eea]/20" />
+                <label className="block mb-2 font-semibold text-[#34495e]">Assignment Date</label>
+                <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full p-3 border-2 border-[#e1e8ed] rounded-lg focus:outline-none focus:border-[#667eea] focus:ring-2 focus:ring-[#667eea]/20" />
               </div>
               <div>
                 <label className="block mb-2 font-semibold text-[#34495e]">Assignment Type</label>
                 <select value={type} onChange={(e) => setType(e.target.value)} className="w-full p-3 border-2 border-[#e1e8ed] rounded-lg focus:outline-none focus:border-[#667eea] focus:ring-2 focus:ring-[#667eea]/20">
-                  <option>Permanent</option>
-                  <option>Temporary</option>
+                  <option value="Permanent">Permanent</option>
+                  <option value="Temporary">Temporary</option>
                 </select>
               </div>
             </div>

@@ -1,88 +1,157 @@
-// import { createContext, useState } from "react";
+import { createContext, useState, useEffect } from "react";
+import { toast } from "react-toastify";
 
-// export const DeskContext = createContext();
+export const DeskContext = createContext(null);
 
-// export const DeskProvider = ({ children }) => {
-//   const [deskAssignments, setDeskAssignments] = useState([
-//     { desk: "205", floor: "Floor 2", status: "Assigned", assignedTo: "John Doe", date: "Jan 15, 2026", employeeId: "EMP-2156", department: "Engineering" },
-//     { desk: "206", floor: "Floor 2", status: "Available", assignedTo: "", date: "Jan 10, 2026" },
-//     { desk: "112", floor: "Floor 1", status: "Maintenance", assignedTo: "", date: "Jan 20, 2026" },
-//     { desk: "301", floor: "Floor 3", status: "Assigned", assignedTo: "Emma Wilson", date: "Jan 18, 2026", employeeId: "EMP-2234", department: "Marketing" },
-//     { desk: "302", floor: "Floor 3", status: "Available", assignedTo: "", date: "Jan 12, 2026" }
-//   ]);
+const DeskProvider = ({ children }) => {
+  const [desks, setDesks] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-//   const assignDesk = (assignment) => {
-//     setDeskAssignments(prev => {
-//       const index = prev.findIndex(d => d.desk === assignment.desk);
-//       if (index !== -1) {
-//         // Update existing desk
-//         const updated = [...prev];
-//         updated[index] = { ...updated[index], ...assignment };
-//         return updated;
-//       } else {
-//         // Add new desk
-//         return [...prev, assignment];
-//       }
-//     });
-//   };
-
-//   return (
-//     <DeskContext.Provider value={{ deskAssignments, assignDesk }}>
-//       {children}
-//     </DeskContext.Provider>
-//   );
-// };
-import { createContext, useState } from "react";
-
-export const DeskContext = createContext();
-
-const initialDesks = [
-  {
-    desk: "205",
-    floor: "Floor 2",
-    status: "Assigned",
-    lastMaintenance: "Dec 15, 2025",
-    updated: "Jan 15, 2026",
-  },
-  {
-    desk: "112",
-    floor: "Floor 1",
-    status: "Maintenance",
-    lastMaintenance: "In Progress",
-    updated: "Jan 20, 2026",
-  },
-  {
-    desk: "206",
-    floor: "Floor 2",
-    status: "Available",
-    lastMaintenance: "Jan 10, 2026",
-    updated: "Jan 10, 2026",
-  },
-  {
-    desk: "405",
-    floor: "Floor 4",
-    status: "Inactive",
-    lastMaintenance: "Aug 5, 2025",
-    updated: "Dec 1, 2025",
-  },
-];
-
-export const DeskProvider = ({ children }) => {
-  const [desks, setDesks] = useState(initialDesks);
-
-  const updateDeskStatus = (deskNo, newStatus) => {
-    setDesks(prev =>
-      prev.map(d =>
-        d.desk === deskNo
-          ? { ...d, status: newStatus, updated: new Date().toDateString() }
-          : d
-      )
-    );
+  const fetchDesks = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("/api/desks/?size=50", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setDesks(data.data || []);
+      } else {
+        console.error("Failed to fetch desks", data);
+      }
+    } catch (error) {
+      console.error("Error fetching desks:", error);
+    }
   };
 
+  const fetchEmployees = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("/api/employees/?size=50", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setEmployees(data);
+      }
+    } catch (error) {
+      console.error("Error fetching employees:", error);
+    }
+  };
+
+  const [assignments, setAssignments] = useState([]);
+
+  const fetchAssignments = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("/api/assignments/?size=50", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setAssignments(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching assignments:", error);
+    }
+  };
+
+  const assignDesk = async (assignmentData) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch("/api/desks/assign-desk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(assignmentData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Assignment failed");
+      }
+
+      toast.success("Desk assigned successfully!");
+      // Refresh data
+      fetchDesks();
+      fetchAssignments();
+      return true;
+    } catch (error) {
+      toast.error(error.message);
+      return false;
+    }
+  };
+
+  const updateDeskStatus = async (deskNo, newStatus, additionalData = {}) => {
+    try {
+      const token = localStorage.getItem("token");
+      const response = await fetch(`/api/desks/by-number/${deskNo}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          current_status: newStatus,
+          ...additionalData
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || "Update failed");
+      }
+
+      toast.success("Desk status updated successfully!");
+      // Refresh all data to ensure consistency across dashboards
+      fetchDesks();
+      fetchAssignments();
+      fetchEmployees();
+      return true;
+    } catch (error) {
+      toast.error(error.message);
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    // Initial fetch if logged in
+    const token = localStorage.getItem("token");
+    if (token) {
+      Promise.all([fetchDesks(), fetchEmployees(), fetchAssignments()]).finally(() => setLoading(false));
+    } else {
+      setLoading(false);
+    }
+
+    // Set up polling for background updates every 30 seconds
+    const interval = setInterval(() => {
+      const activeToken = localStorage.getItem("token");
+      if (activeToken) {
+        fetchDesks();
+        fetchEmployees();
+        fetchAssignments();
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   return (
-    <DeskContext.Provider value={{ desks, updateDeskStatus }}>
+    <DeskContext.Provider value={{ desks, employees, assignments, assignDesk, updateDeskStatus, fetchDesks, fetchEmployees, fetchAssignments, loading }}>
       {children}
     </DeskContext.Provider>
   );
 };
+
+export default DeskProvider;
