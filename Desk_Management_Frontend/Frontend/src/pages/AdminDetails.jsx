@@ -1,9 +1,64 @@
 import { useLocation, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 
 const AdminDetails = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const user = location.state;
+  const [userProfile, setUserProfile] = useState(null);
+  const [deskHistory, setDeskHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
+
+  // Get user profile from JWT token
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    if (!token) {
+      navigate("/login");
+      return;
+    }
+
+    try {
+      const base64Url = token.split('.')[1];
+      const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+      const payload = JSON.parse(window.atob(base64));
+
+      setUserProfile({
+        name: payload.full_name || "Admin",
+        role: payload.role === "ADMIN" ? "Administrator" : payload.role
+      });
+    } catch (e) {
+      console.error("Error decoding token", e);
+      navigate("/login");
+    }
+  }, [navigate]);
+
+  // Fetch Desk History
+  useEffect(() => {
+    const fetchHistory = async () => {
+      if (!user || !user.desk) return;
+
+      try {
+        const token = localStorage.getItem("token");
+        const response = await fetch(`/api/desks/by-number/${user.desk}/history`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+        const data = await response.json();
+        if (response.ok) {
+          setDeskHistory(data);
+        } else {
+          console.error("Failed to fetch history", data);
+        }
+      } catch (error) {
+        console.error("Error fetching desk history:", error);
+      } finally {
+        setHistoryLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, [user]);
 
   if (!user) {
     return (
@@ -21,25 +76,8 @@ const AdminDetails = () => {
     );
   }
 
-  // Example assignment history, you can replace with dynamic data if needed
-  const history = user.history || [
-    {
-      date: "Jan 15, 2026 - 09:30 AM",
-      text: `Assigned to ${user.user}  by Admin Sarah Johnson`,
-    },
-    {
-      date: "Dec 10, 2025 - 02:15 PM",
-      text: `Unassigned from Michael Chen (EMP-1847) - Employee Transfer`,
-    },
-    {
-      date: "Aug 5, 2025 - 11:00 AM",
-      text: `Assigned to Michael Chen (EMP-1847) by Admin Robert Chen`,
-    },
-    {
-      date: "Jun 1, 2025 - 09:00 AM",
-      text: `Desk Added to inventory by IT Support`,
-    },
-  ];
+  // No longer using hardcoded history constant
+  const history = deskHistory;
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] p-5 text-[#2c3e50]">
@@ -51,8 +89,8 @@ const AdminDetails = () => {
           </div>
           <div className="flex items-center gap-4 text-right">
             <div>
-              <div className="font-semibold">Sarah Johnson</div>
-              <div className="text-xs text-[#7f8c8d]">Admin / Manager</div>
+              <div className="font-semibold">{userProfile ? userProfile.name : "Loading..."}</div>
+              <div className="text-xs text-[#7f8c8d]">{userProfile ? userProfile.role : "Admin"}</div>
             </div>
             <button
               onClick={() => navigate("/")}
@@ -94,7 +132,8 @@ const AdminDetails = () => {
                   className={`inline-block px-3 py-1 rounded-full text-xs font-semibold
                   ${user.status === "Assigned" ? "bg-blue-100 text-blue-700" : ""}
                   ${user.status === "Available" ? "bg-green-100 text-green-700" : ""}
-                  ${user.status === "Maintenance" ? "bg-yellow-100 text-yellow-700" : ""}`}
+                  ${user.status === "Maintenance" ? "bg-yellow-100 text-yellow-700" : ""}
+                  ${user.status === "Inactive" ? "bg-red-100 text-red-700" : ""}`}
                 >
                   {user.status}
                 </span>
@@ -119,22 +158,29 @@ const AdminDetails = () => {
             </div>
             <div className="p-4 bg-[#f8f9fa] rounded-lg">
               <div className="text-xs font-semibold text-[#7f8c8d] mb-1 uppercase">Assigned By</div>
-              <div className="font-semibold text-[#2c3e50]">Admin - Sarah Johnson</div>
+              <div className="font-semibold text-[#2c3e50]">{user.assignedBy || "—"}</div>
             </div>
           </div>
 
           {/* Assignment History */}
           <h3 className="text-xl font-bold mb-4">Assignment History</h3>
           <div className="relative border-l-2 border-[#e1e8ed] ml-3">
-            {history.map((item, index) => (
-              <div key={index} className="mb-6 ml-6 relative">
-                <div className="absolute -left-5 top-1 w-3 h-3 rounded-full bg-[#667eea] border-2 border-white shadow" />
-                <div className="bg-[#f8f9fa] p-3 rounded-lg">
-                  <div className="text-xs text-[#7f8c8d] mb-1">{item.date}</div>
-                  <div className="text-sm text-[#2c3e50]">{item.text}</div>
+            {historyLoading ? (
+              <div className="p-6 text-center text-gray-500 italic">Loading history...</div>
+            ) : history.length > 0 ? (
+              history.map((item, index) => (
+                <div key={index} className="mb-6 ml-6 relative">
+                  <div className="absolute -left-5 top-1 w-3 h-3 rounded-full bg-[#667eea] border-2 border-white shadow" />
+                  <div className="bg-[#f8f9fa] p-3 rounded-lg">
+                    <div className="text-xs text-[#7f8c8d] mb-1">{item.date}</div>
+                    <div className="text-sm text-[#2c3e50] font-medium">{item.text}</div>
+                    {item.notes && <div className="text-xs text-gray-500 mt-1 italic">Note: {item.notes}</div>}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+            ) : (
+              <div className="p-6 text-center text-gray-400 italic">No history available for this desk</div>
+            )}
           </div>
 
           {/* Actions */}
