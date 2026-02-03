@@ -1,0 +1,44 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: desk_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+
+  backend:
+    build:
+      context: ./Desk-management-Backend
+    container_name: desk_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Override DB URL inside container if provided; defaults to SQLite otherwise
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      - db
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build:
+      context: ./Desk_Management_Frontend/Frontend
+    container_name: desk_frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  db_data:
+
