@@ -65,12 +65,15 @@ const AdminDashboard = () => {
       (a.released_date === null || a.released_date === "None")
     );
 
-    // Generate location from desk_number if not provided
-    const location = desk.location || `Floor ${desk.desk_number[0]}`;
+    // Ensure floor is numeric
+    const floorNum = typeof desk.floor === 'number' ? desk.floor : parseInt(desk.floor, 10);
+    // Generate location from floor - ensure it always displays
+    const location = desk.location ? desk.location : `Floor ${floorNum}`;
 
     return {
+      ...desk,
       desk: desk.desk_number,
-      floor: desk.floor,
+      floor: floorNum,
       location: location,
       status: desk.current_status === "ASSIGNED" ? "Assigned" :
         desk.current_status === "AVAILABLE" ? "Available" :
@@ -83,8 +86,7 @@ const AdminDashboard = () => {
       employeeDbId: activeAssignment ? activeAssignment.employee_id : null,
       deskDbId: desk.id,
       assignedBy: activeAssignment ? activeAssignment.assigned_by : (desk.current_status === "AVAILABLE" ? "—" : "System"),
-      notes: activeAssignment ? activeAssignment.notes : "",
-      ...desk
+      notes: activeAssignment ? activeAssignment.notes : ""
     };
   });
 
@@ -204,7 +206,7 @@ const AdminDashboard = () => {
                 {filteredDesks.map((d, i) => (
                   <tr key={i} className="border-b hover:bg-gray-50">
                     <td className="p-3 font-semibold">{d.desk}</td>
-                    <td className="p-3">{d.location}</td>
+                    <td className="p-3 text-sm font-medium text-gray-700">{d.location || 'N/A'}</td>
                     <td className="p-6">
                       <span className={`px-3 py-2 rounded-full text-xs font-semibold
                         ${d.status === "Assigned" && "bg-blue-100 text-blue-700"}

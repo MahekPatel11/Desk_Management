@@ -48,18 +48,20 @@ const ITSupportDashboard = () => {
     
     const searchLower = search.toLowerCase();
     const updatedDate = d.updated_at ? new Date(d.updated_at).toLocaleDateString() : "";
-    const displayFloor = `Floor ${d.floor}`;
+    // Ensure floor is numeric
+    const floorNum = typeof d.floor === 'number' ? d.floor : parseInt(d.floor, 10);
+    const displayFloor = `Floor ${floorNum}`;
     
     const matchesSearch = search === "" ||
       d.desk_number.toString().toLowerCase().includes(searchLower) ||
-      d.floor.toString().toLowerCase().includes(searchLower) ||
+      floorNum.toString().toLowerCase().includes(searchLower) ||
       displayFloor.toLowerCase().includes(searchLower) ||
       updatedDate.toLowerCase().includes(searchLower) ||
       (assignment && assignment.employee_name.toLowerCase().includes(searchLower));
     
     return matchesSearch &&
       (statusFilter === "All" || d.current_status === statusFilter) &&
-      (floorFilter === "All" || d.floor.toString() === floorFilter);
+      (floorFilter === "All" || floorNum.toString() === floorFilter);
   });
 
   return (
@@ -165,7 +167,7 @@ const ITSupportDashboard = () => {
                   return (
                     <tr key={d.id} className="hover:bg-[#f8f9fa] border-b">
                       <td className="p-4 font-semibold">{d.desk_number}</td>
-                      <td>Floor {d.floor}</td>
+                      <td>Floor {typeof d.floor === 'number' ? d.floor : parseInt(d.floor, 10)}</td>
                       <td className="text-sm">
                         {assignment ? (
                           <span className="font-semibold">{assignment.employee_name}</span>
