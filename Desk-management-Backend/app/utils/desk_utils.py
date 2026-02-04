@@ -22,4 +22,4 @@ def extract_floor_and_index(desk_number: int | str):
     if desk_index < 0 or desk_index > 999: # More relaxed index check
         raise ValueError("Invalid desk index")
 
-    return f"Floor {floor}", desk_index
+    return floor, desk_index

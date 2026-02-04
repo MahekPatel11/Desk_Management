@@ -28,3 +28,14 @@ class Desk(Base):
         default=datetime.utcnow,
         onupdate=datetime.utcnow
     )
+
+    @property
+    def display_location(self):
+        """Always return location in 'Floor X' format"""
+        if self.location:
+            return self.location
+        # Fallback: generate from floor or desk_number
+        if self.desk_number and len(self.desk_number) > 0:
+            floor_num = self.desk_number[0]
+            return f"Floor {floor_num}"
+        return self.floor if self.floor else "Unknown"

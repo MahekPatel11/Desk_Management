@@ -113,7 +113,20 @@ def assign_desk(
     # Check desk exists
     desk = db.query(Desk).filter(Desk.id == request.desk_id).first()
     if not desk:
-        return {"error": "Desk not found"}
+        raise HTTPException(status_code=404, detail="Desk not found")
+
+    # Desk must not be in MAINTENANCE or INACTIVE
+    if desk.current_status in ["MAINTENANCE", "INACTIVE"]:
+        raise HTTPException(status_code=400, detail=f"Desk is in {desk.current_status} status and cannot be assigned")
+
+    # Check employee exists
+    employee = (
+        db.query(Employee)
+        .filter(Employee.id == request.employee_id)
+        .first()
+    )
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
 
     # If desk is ASSIGNED, release the current assignment(s)
     if desk.current_status == "ASSIGNED":
@@ -141,26 +154,13 @@ def assign_desk(
         if old_desk and old_desk.current_status == "ASSIGNED":
             old_desk.current_status = "AVAILABLE"
 
-    # Desk must not be in MAINTENANCE or INACTIVE
-    if desk.current_status in ["MAINTENANCE", "INACTIVE"]:
-        return {"error": f"Desk is in {desk.current_status} status and cannot be assigned"}
-
-    # Check employee exists
-    employee = (
-        db.query(Employee)
-        .filter(Employee.id == request.employee_id)
-        .first()
-    )
-    if not employee:
-        return {"error": "Employee not found"}
-
     # Determine assignment date
     assignment_date = date.today()
     if request.date:
         try:
              assignment_date = date.fromisoformat(request.date)
         except ValueError:
-             return {"error": "Invalid date format. Use YYYY-MM-DD"}
+             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
 
     # Create assignment
     assignment = DeskAssignment(
@@ -169,7 +169,8 @@ def assign_desk(
         employee_id=employee.id,
         assigned_by=current_user.id,
         assigned_date=assignment_date,
-        assignment_type=request.assignment_type
+        assignment_type=request.assignment_type,
+        notes=request.notes
     )
 
     # Update desk status

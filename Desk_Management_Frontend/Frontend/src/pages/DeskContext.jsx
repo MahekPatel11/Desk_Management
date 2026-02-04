@@ -66,6 +66,17 @@ const DeskProvider = ({ children }) => {
   const assignDesk = async (assignmentData) => {
     try {
       const token = localStorage.getItem("token");
+      
+      // Validate required fields
+      if (!assignmentData.desk_id) {
+        toast.error("Please select a desk");
+        return false;
+      }
+      if (!assignmentData.employee_id) {
+        toast.error("Please select an employee");
+        return false;
+      }
+      
       const response = await fetch("/api/desks/assign-desk", {
         method: "POST",
         headers: {
@@ -78,7 +89,7 @@ const DeskProvider = ({ children }) => {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "Assignment failed");
+        throw new Error(data.detail || data.error || "Assignment failed");
       }
 
       toast.success("Desk assigned successfully!");

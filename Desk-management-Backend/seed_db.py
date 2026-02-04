@@ -104,22 +104,22 @@ def seed():
         # 2. Create Desks
         print("Creating desks...")
         desks_data = [
-            ("101", "Floor 1", "AVAILABLE"),
-            ("102", "Floor 1", "AVAILABLE"),
-            ("103", "Floor 1", "AVAILABLE"),
-            ("104", "Floor 1", "AVAILABLE"),
-            ("105", "Floor 1", "AVAILABLE"),
-            ("201", "Floor 2", "AVAILABLE"),
-            ("202", "Floor 2", "AVAILABLE"),
-            ("203", "Floor 2", "AVAILABLE"),
-            ("204", "Floor 2", "AVAILABLE"),
-            ("205", "Floor 2", "ASSIGNED"),
-            ("206", "Floor 2", "AVAILABLE"),
-            ("301", "Floor 3", "ASSIGNED"),
-            ("302", "Floor 3", "AVAILABLE"),
-            ("303", "Floor 3", "AVAILABLE"),
-            ("304", "Floor 3", "AVAILABLE"),
-            ("305", "Floor 3", "AVAILABLE"),
+            ("101", 1, "AVAILABLE"),
+            ("102", 1, "AVAILABLE"),
+            ("103", 1, "AVAILABLE"),
+            ("104", 1, "AVAILABLE"),
+            ("105", 1, "AVAILABLE"),
+            ("201", 2, "AVAILABLE"),
+            ("202", 2, "AVAILABLE"),
+            ("203", 2, "AVAILABLE"),
+            ("204", 2, "AVAILABLE"),
+            ("205", 2, "ASSIGNED"),
+            ("206", 2, "AVAILABLE"),
+            ("301", 3, "ASSIGNED"),
+            ("302", 3, "AVAILABLE"),
+            ("303", 3, "AVAILABLE"),
+            ("304", 3, "AVAILABLE"),
+            ("305", 3, "AVAILABLE"),
         ]
 
         for num, floor, status in desks_data:

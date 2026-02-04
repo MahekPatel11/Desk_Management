@@ -65,9 +65,13 @@ const AdminDashboard = () => {
       (a.released_date === null || a.released_date === "None")
     );
 
+    // Generate location from desk_number if not provided
+    const location = desk.location || `Floor ${desk.desk_number[0]}`;
+
     return {
       desk: desk.desk_number,
       floor: desk.floor,
+      location: location,
       status: desk.current_status === "ASSIGNED" ? "Assigned" :
         desk.current_status === "AVAILABLE" ? "Available" :
           desk.current_status === "MAINTENANCE" ? "Maintenance" :
@@ -89,9 +93,9 @@ const AdminDashboard = () => {
     const matchSearch =
       d.desk.includes(search) ||
       (d.user && d.user.toLowerCase().includes(search.toLowerCase())) ||
-      d.floor.toLowerCase().includes(search.toLowerCase());
+      d.floor.toString().toLowerCase().includes(search.toLowerCase());
     const matchStatus = status === "All" || d.status === status;
-    const matchFloor = floor === "All" || d.floor === floor;
+    const matchFloor = floor === "All" || d.floor.toString() === floor;
     return matchSearch && matchStatus && matchFloor;
   });
 
@@ -179,10 +183,10 @@ const AdminDashboard = () => {
               className="border-2 rounded-lg px-4 py-2"
               onChange={(e) => setFloor(e.target.value)}
             >
-              <option>All</option>
-              <option>Floor 1</option>
-              <option>Floor 2</option>
-              <option>Floor 3</option>
+              <option value="All">All</option>
+              <option value="1">Floor 1</option>
+              <option value="2">Floor 2</option>
+              <option value="3">Floor 3</option>
             </select>
           </div>
 
@@ -200,7 +204,7 @@ const AdminDashboard = () => {
                 {filteredDesks.map((d, i) => (
                   <tr key={i} className="border-b hover:bg-gray-50">
                     <td className="p-3 font-semibold">{d.desk}</td>
-                    <td className="p-3">{d.floor}</td>
+                    <td className="p-3">{d.location}</td>
                     <td className="p-6">
                       <span className={`px-3 py-2 rounded-full text-xs font-semibold
                         ${d.status === "Assigned" && "bg-blue-100 text-blue-700"}

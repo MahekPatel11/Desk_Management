@@ -1,6 +1,7 @@
 
 import { useLocation, useNavigate } from "react-router-dom";
 import { useState, useEffect, useContext } from "react";
+import { toast } from "react-toastify";
 import { DeskContext } from "./DeskContext";
 
 // Removed hardcoded employeesData and desksData
@@ -66,13 +67,23 @@ const AssignDesk = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validate required fields
+    if (!desk) {
+      toast.error("Please select a desk");
+      return;
+    }
+    if (!employee) {
+      toast.error("Please select an employee");
+      return;
+    }
+
     // Push assignment to context
     const success = await assignDesk({
       desk_id: desk, // State 'desk' actually holds the ID now
       employee_id: employee, // State 'employee' actually holds the ID
       assignment_type: type.toUpperCase(),
-      notes: notes,
-      date: date // Pass request date
+      notes: notes || null,
+      date: date || new Date().toISOString().split('T')[0] // Use today's date if not provided
     });
 
     if (success) {

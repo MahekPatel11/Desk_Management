@@ -40,13 +40,27 @@ const ITSupportDashboard = () => {
     fetchAssignments();
   }, []);
 
-  const filteredDesks = desks.filter(d =>
-    (search === "" ||
-      d.desk_number.toString().toLowerCase().includes(search.toLowerCase()) ||
-      d.floor.toString().toLowerCase().includes(search.toLowerCase())) &&
-    (statusFilter === "All" || d.current_status === statusFilter) &&
-    (floorFilter === "All" || d.floor === floorFilter)
-  );
+  const filteredDesks = desks.filter(d => {
+    const assignment = assignments.find(a =>
+      a.desk_number === d.desk_number &&
+      (a.released_date === null || a.released_date === "None")
+    );
+    
+    const searchLower = search.toLowerCase();
+    const updatedDate = d.updated_at ? new Date(d.updated_at).toLocaleDateString() : "";
+    const displayFloor = `Floor ${d.floor}`;
+    
+    const matchesSearch = search === "" ||
+      d.desk_number.toString().toLowerCase().includes(searchLower) ||
+      d.floor.toString().toLowerCase().includes(searchLower) ||
+      displayFloor.toLowerCase().includes(searchLower) ||
+      updatedDate.toLowerCase().includes(searchLower) ||
+      (assignment && assignment.employee_name.toLowerCase().includes(searchLower));
+    
+    return matchesSearch &&
+      (statusFilter === "All" || d.current_status === statusFilter) &&
+      (floorFilter === "All" || d.floor.toString() === floorFilter);
+  });
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] text-[#2c3e50] p-5">
@@ -121,10 +135,10 @@ const ITSupportDashboard = () => {
               className="border-2 border-[#e1e8ed] rounded-lg px-4 py-3 text-sm"
               onChange={e => setFloorFilter(e.target.value)}
             >
-              <option>All</option>
-              <option>Floor 1</option>
-              <option>Floor 2</option>
-              <option>Floor 3</option>
+              <option value="All">All</option>
+              <option value="1">Floor 1</option>
+              <option value="2">Floor 2</option>
+              <option value="3">Floor 3</option>
             </select>
           </div>
 
@@ -151,13 +165,10 @@ const ITSupportDashboard = () => {
                   return (
                     <tr key={d.id} className="hover:bg-[#f8f9fa] border-b">
                       <td className="p-4 font-semibold">{d.desk_number}</td>
-                      <td>{d.floor}</td>
+                      <td>Floor {d.floor}</td>
                       <td className="text-sm">
                         {assignment ? (
-                          <div className="flex flex-col">
-                            <span className="font-semibold">{assignment.employee_name}</span>
-                            <span className="text-xs text-gray-500">{assignment.department}</span>
-                          </div>
+                          <span className="font-semibold">{assignment.employee_name}</span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}
