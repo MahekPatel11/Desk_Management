@@ -10,6 +10,8 @@ from app.utils.jwt import (
     create_password_reset_token,
     decode_password_reset_token,
 )
+from app.models.employees import Employee
+from datetime import datetime
 
 # -------------------------------------------------
 # Router setup
@@ -84,6 +86,21 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
         is_active=True
     )
     db.add(new_user)
+    # ensure new_user.id is populated before creating related Employee
+    db.flush()
+    # If registering an EMPLOYEE, also create an Employee record so they
+    # appear in the /employees endpoint used for desk assignments.
+    if request.role == "EMPLOYEE":
+        # generate a simple employee code (EMP-<last 4 of uuid>) and default dept
+        emp_code = f"EMP-{str(uuid.uuid4())[:8]}"
+        emp = Employee(
+            id=str(uuid.uuid4()),
+            employee_code=emp_code,
+            name=request.full_name,
+            department="General",
+            user_id=new_user.id,
+        )
+        db.add(emp)
     db.commit()
     db.refresh(new_user)
     return {"message": "User registered successfully"}
