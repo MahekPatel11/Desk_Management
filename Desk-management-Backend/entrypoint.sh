@@ -12,7 +12,7 @@ echo "Running migrations..."
 alembic upgrade head
 
 # Uncomment the following line if you want to seed the database on every startup (CAUTION: drops data)
-# python seed_db.py
+python seed_db.py
 
 echo "Starting Backend API..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

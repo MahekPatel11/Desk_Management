@@ -1,4 +1,5 @@
 import uuid
+import sqlalchemy as sa
 from datetime import date
 
 from app.database.database import SessionLocal, engine, Base
@@ -13,15 +14,34 @@ from app.utils.auth import pwd_context
 
 def seed():
   """
-  Drop existing tables, recreate schema, and seed with
-  realistic users, departments, floors, and desks.
+  Seed with realistic users, departments, floors, and desks.
   """
-  print("Dropping and recreating tables...")
-  Base.metadata.drop_all(bind=engine)
-  Base.metadata.create_all(bind=engine)
 
   db = SessionLocal()
   try:
+    print("Cleaning existing data...")
+    # Disable foreign key checks to allow deleting in any order (MySQL/PostgreSQL)
+    if engine.name == 'mysql':
+        db.execute(sa.text("SET FOREIGN_KEY_CHECKS = 0;"))
+    elif engine.name == 'postgresql':
+        db.execute(sa.text("SET session_replication_role = 'replica';"))
+
+    db.execute(sa.text("DELETE FROM desk_requests;"))
+    db.execute(sa.text("DELETE FROM desk_status_history;"))
+    db.execute(sa.text("DELETE FROM desk_assignments;"))
+    db.execute(sa.text("DELETE FROM desks;"))
+    db.execute(sa.text("DELETE FROM employees;"))
+    db.execute(sa.text("DELETE FROM users;"))
+    db.execute(sa.text("DELETE FROM departments;"))
+    db.execute(sa.text("DELETE FROM floors;"))
+    db.execute(sa.text("DELETE FROM system_settings;"))
+
+    if engine.name == 'mysql':
+        db.execute(sa.text("SET FOREIGN_KEY_CHECKS = 1;"))
+    elif engine.name == 'postgresql':
+        db.execute(sa.text("SET session_replication_role = 'origin';"))
+    
+    db.commit()
     # ------------------------------------------------------------------
     # 1. Floors
     # ------------------------------------------------------------------

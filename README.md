@@ -63,8 +63,8 @@ Ideally suited for hybrid work models, the system supports:
     ```
 
 3.  **Access the Application**
-    *   **Local**: [http://localhost:80](http://localhost:80)
-    *   **Network**: [http://172.18.0.x:80](http://172.18.0.x:80) (Check your docker logs for precise IP)
+    *   **Local**: [http://localhost:3000/](http://localhost:80)
+    *   **Network**: [http://172.18.0.4:3000/](http://172.18.0.x:80) 
     *   **Backend API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 4.  **Stop the Application**
