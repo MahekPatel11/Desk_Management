@@ -51,7 +51,6 @@ def hash_password(password: str) -> str:
 class LoginRequest(BaseModel):
     email: str
     password: str
-    role: str  # EMPLOYEE / ADMIN / IT_SUPPORT
 
 
 class RegisterRequest(BaseModel):
@@ -128,14 +127,7 @@ def login(
             detail="Invalid email or password"
         )
 
-    # 3️⃣ Validate Role
-    if user.role != request.role:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Unauthorized role"
-        )
-
-    # 4️⃣ Check if user is active
+    # 3️⃣ Check if user is active
     if not user.is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

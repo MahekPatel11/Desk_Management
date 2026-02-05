@@ -4,7 +4,7 @@ import { DeskContext } from "./DeskContext";
 
 const EmployeeDetails = () => {
   const navigate = useNavigate();
-  const { employees, assignments, desks, fetchDesks, fetchAssignments, fetchEmployees } = useContext(DeskContext);
+  const { employees, assignments, desks, fetchDesks, fetchAssignments, fetchEmployees, fetchMyDeskRequests, myDeskRequests, loading } = useContext(DeskContext);
   const [myAssignment, setMyAssignment] = useState(null);
   const [myEmployeeProfile, setMyEmployeeProfile] = useState(null);
 
@@ -31,14 +31,10 @@ const EmployeeDetails = () => {
       if (emp) {
         setMyEmployeeProfile(emp);
 
-        // Find assignment by employee_code AND ensure it's not released
-        // Sort by assigned_date descending to get the newest one if multiple "active" ones exist
+        // Find the latest assignment (the one with the latest assigned_date) that hasn't been released
         const assignment = [...assignments]
-          .sort((a, b) => new Date(b.assigned_date) - new Date(a.assigned_date))
-          .find(a =>
-            a.employee_code === emp.employee_code &&
-            (a.released_date === null || a.released_date === "None")
-          );
+          .filter(a => a.employee_code === emp.employee_code && (a.released_date === null || a.released_date === "None"))
+          .sort((a, b) => new Date(b.assigned_date) - new Date(a.assigned_date))[0];
 
         if (assignment) {
           const desk = desks.find(d => d.desk_number === assignment.desk_number);
@@ -58,7 +54,18 @@ const EmployeeDetails = () => {
     fetchDesks();
     fetchAssignments();
     fetchEmployees();
+    fetchMyDeskRequests();
   }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f5f7fa] flex items-center justify-center">
+        <div className="text-[#667eea] text-xl font-bold animate-pulse">
+          Loading your details...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] p-5 text-[#2c3e50]">

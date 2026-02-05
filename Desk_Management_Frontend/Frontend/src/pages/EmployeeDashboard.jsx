@@ -4,10 +4,25 @@ import { DeskContext } from "./DeskContext";
 
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
-  const { employees, assignments, desks, fetchDesks, fetchAssignments, fetchEmployees } = useContext(DeskContext); // Keep data integration
+  const {
+    employees,
+    assignments,
+    desks,
+    fetchDesks,
+    fetchAssignments,
+    fetchEmployees,
+    createDeskRequest,
+    fetchMyDeskRequests,
+    myDeskRequests,
+    loading,
+  } = useContext(DeskContext); // Keep data integration
   const [myAssignment, setMyAssignment] = useState(null);
   const [allMyAssignments, setAllMyAssignments] = useState([]);
   const [myEmployeeProfile, setMyEmployeeProfile] = useState(null);
+  const [requestShift, setRequestShift] = useState("MORNING");
+  const [requestFromDate, setRequestFromDate] = useState("");
+  const [requestToDate, setRequestToDate] = useState("");
+  const [requestNote, setRequestNote] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("token");
@@ -37,11 +52,14 @@ const EmployeeDashboard = () => {
 
         setAllMyAssignments(myHistory);
 
-        // Find active assignment
-        const active = myHistory.find(a => a.released_date === null || a.released_date === "None");
-        if (active) {
-          const desk = desks.find(d => d.desk_number === active.desk_number);
-          setMyAssignment({ ...active, desk_info: desk });
+        // Find the latest assignment (the one with the latest assigned_date)
+        const latest = myHistory.find(a =>
+          (a.released_date === null || a.released_date === "None")
+        );
+
+        if (latest) {
+          const desk = desks.find(d => d.desk_number === latest.desk_number);
+          setMyAssignment({ ...latest, desk_info: desk });
         }
       }
     } catch (e) {
@@ -56,6 +74,7 @@ const EmployeeDashboard = () => {
     fetchDesks();
     fetchAssignments();
     fetchEmployees();
+    fetchMyDeskRequests();
   }, []);
 
   // Helper to find who a desk was reassigned to
@@ -71,6 +90,43 @@ const EmployeeDashboard = () => {
 
     return nextAssignment ? nextAssignment.employee_name : null;
   };
+
+  const handleSubmitDeskRequest = async (e) => {
+    e.preventDefault();
+    if (!requestFromDate || !requestToDate) {
+      return;
+    }
+    if (requestFromDate > requestToDate) {
+      return;
+    }
+
+    const payload = {
+      shift: requestShift,
+      from_date: requestFromDate,
+      to_date: requestToDate,
+      note: requestNote || null,
+    };
+
+    const result = await createDeskRequest(payload);
+    if (result) {
+      // Clear form after successful submission
+      setRequestShift("MORNING");
+      setRequestFromDate("");
+      setRequestToDate("");
+      setRequestNote("");
+      // Refresh request history immediately
+      fetchMyDeskRequests();
+    }
+  };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#f5f7fa] flex items-center justify-center">
+        <div className="text-[#667eea] text-xl font-bold animate-pulse">
+          Loading your dashboard...
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f5f7fa] p-5 font-['Segoe_UI',Tahoma,Geneva,Verdana,sans-serif] text-[#2c3e50]">
@@ -172,25 +228,167 @@ const EmployeeDashboard = () => {
           </div>
         </div>
 
+        {/* Desk Request (Date Range + Shift) */}
+        <div className="bg-white p-8 rounded-xl shadow mb-8">
+          <div className="flex justify-between items-center border-b-2 border-[#f0f0f0] pb-5 mb-6 flex-wrap gap-3">
+            <h2 className="text-xl font-bold">Request a Desk</h2>
+          </div>
+
+          <form
+            onSubmit={handleSubmitDeskRequest}
+            className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end"
+          >
+            <div>
+              <label className="block text-xs font-semibold text-[#7f8c8d] mb-2 uppercase">
+                Shift
+              </label>
+              <select
+                value={requestShift}
+                onChange={(e) => setRequestShift(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              >
+                <option value="MORNING">Morning (10am–6pm)</option>
+                <option value="NIGHT">Night (10pm–6am)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#7f8c8d] mb-2 uppercase">
+                From Date
+              </label>
+              <input
+                type="date"
+                value={requestFromDate}
+                onChange={(e) => setRequestFromDate(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[#7f8c8d] mb-2 uppercase">
+                To Date
+              </label>
+              <input
+                type="date"
+                value={requestToDate}
+                onChange={(e) => setRequestToDate(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+                required
+              />
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <label className="block text-xs font-semibold text-[#7f8c8d] mb-1 uppercase">
+                Note (Optional)
+              </label>
+              <input
+                type="text"
+                placeholder="Any preference or note..."
+                value={requestNote}
+                onChange={(e) => setRequestNote(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg text-sm"
+              />
+              <button
+                type="submit"
+                className="mt-2 px-4 py-2 bg-[#667eea] text-white rounded-md font-semibold text-sm"
+              >
+                Request Desk
+              </button>
+            </div>
+          </form>
+
+        </div>
+
+        <div className="bg-white p-8 rounded-xl shadow mb-5">
+          <h2 className="text-xl font-bold mb-6">Desk Request History</h2>
+          {myDeskRequests && myDeskRequests.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100">
+                  <tr>
+                    {["Created", "Shift", "From", "To", "Status", "Desk"].map((h) => (
+                      <th key={h} className="p-3 text-left">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {myDeskRequests.map((r) => (
+                    <tr key={r.id} className="border-b">
+                      <td className="p-3">
+                        {r.created_at ? r.created_at.split("T")[0] : "—"}
+                      </td>
+                      <td className="p-3">{r.shift}</td>
+                      <td className="p-3">{r.from_date}</td>
+                      <td className="p-3">{r.to_date}</td>
+                      <td className="p-3">
+                        <span
+                          className={`px-3 py-1 rounded-full text-xs font-semibold
+                          ${r.status === "APPROVED" ? "bg-green-100 text-green-700" : ""}
+                          ${r.status === "PENDING" ? "bg-yellow-100 text-yellow-700" : ""}
+                          ${r.status === "REJECTED" ? "bg-red-100 text-red-700" : ""}`}
+                        >
+                          {r.status}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        {r.assigned_desk_number || "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="text-center text-[#7f8c8d] py-8 bg-[#f8f9fa] rounded-xl border-2 border-dashed">
+              <div className="text-3xl mb-2">📝</div>
+              <div>No desk requests found</div>
+            </div>
+          )}
+        </div>
+
         {/* Assignment History */}
-        <div className="bg-white p-8 rounded-xl shadow">
+        <div className="bg-white p-8 rounded-xl shadow mb-5">
           <h2 className="text-xl font-bold mb-6">Assignment History</h2>
 
           {allMyAssignments.length > 0 ? (
             <div className="relative pl-10 border-l-2 border-[#e1e8ed] ml-3">
               {allMyAssignments.map((a, idx) => {
                 const reassignedTo = getReassignedTo(a.desk_number, a.released_date);
+                const isFuture =
+                  a.start_date &&
+                  new Date(a.start_date) > new Date();
+                const windowLabel =
+                  a.start_date && a.end_date
+                    ? `${a.start_date} to ${a.end_date}`
+                    : a.assigned_date;
+
                 return (
                   <div key={idx} className="mb-8 relative">
                     <span className="absolute -left-[47px] top-[5px] w-4 h-4 bg-[#667eea] rounded-full border-4 border-white shadow" />
                     <div className="bg-[#f8f9fa] p-5 rounded-xl border border-transparent hover:border-[#667eea]/20 transition-all">
                       <div className="flex justify-between items-start mb-2">
                         <div className="text-sm font-bold text-[#667eea]">Desk {a.desk_number}</div>
-                        <div className="text-xs text-[#7f8c8d]">{a.assigned_date} {a.released_date && a.released_date !== "None" ? `to ${a.released_date}` : "(Active)"}</div>
+                        <div className="text-xs text-[#7f8c8d]">
+                          {windowLabel}{" "}
+                          {a.released_date && a.released_date !== "None"
+                            ? `(Released ${a.released_date})`
+                            : "(Active/Booked)"}
+                        </div>
                       </div>
-                      <div className="text-sm">
+                      <div className="text-sm mb-1">
                         Assigned by <span className="font-semibold">{a.assigned_by}</span>
                       </div>
+                      <div className="text-xs text-[#7f8c8d] mb-1">
+                        Shift: <span className="font-semibold">{a.shift || "MORNING"}</span>
+                      </div>
+                      {isFuture && (
+                        <div className="text-xs text-green-700 font-semibold mb-1">
+                          Upcoming booking
+                        </div>
+                      )}
                       {reassignedTo && (
                         <div className="mt-3 pt-3 border-t border-dashed border-gray-200">
                           <div className="text-sm text-orange-600 font-medium flex items-center gap-2">

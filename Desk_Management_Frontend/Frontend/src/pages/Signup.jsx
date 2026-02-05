@@ -15,12 +15,21 @@ const Signup = () => {
         e.preventDefault();
 
         try {
+            const normalizedEmail = email.trim().toLowerCase();
+            const normalizedPassword = password.trim();
+            const normalizedFullName = fullName.trim();
+
             const response = await fetch("/auth/register", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ email, password, full_name: fullName, role }),
+                body: JSON.stringify({
+                    email: normalizedEmail,
+                    password: normalizedPassword,
+                    full_name: normalizedFullName,
+                    role
+                }),
             });
 
             const data = await response.json();

@@ -48,14 +48,17 @@ def get_current_user(
 
 def require_role(required_role: str | list[str]):
     def role_checker(current_user: User = Depends(get_current_user)):
+        # Normalize role to string (handles SQLAlchemy Enum objects)
+        user_role = str(current_user.role.name) if hasattr(current_user.role, 'name') else str(current_user.role)
+        
         if isinstance(required_role, str):
-            if current_user.role != required_role:
+            if user_role != required_role:
                  raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access forbidden"
                 )
         elif isinstance(required_role, list):
-             if current_user.role not in required_role:
+             if user_role not in required_role:
                  raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access forbidden"

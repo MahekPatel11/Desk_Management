@@ -44,9 +44,13 @@ def get_assignments(
             Employee.department,
             User.full_name.label("assigned_by"),
             DeskAssignment.assigned_date,
+            DeskAssignment.start_date,
+            DeskAssignment.end_date,
+            DeskAssignment.shift,
+            DeskAssignment.is_auto_assigned,
             DeskAssignment.assignment_type,
             DeskAssignment.released_date,
-            Desk.current_status
+            Desk.current_status,
         )
         .join(Desk, DeskAssignment.desk_id == Desk.id)
         .join(Employee, DeskAssignment.employee_id == Employee.id)
@@ -84,6 +88,12 @@ def get_assignments(
     # Convert Row objects to dictionaries for JSON serialization
     data = []
     for row in rows:
+        # Display-friendly \"assigned_by\": show Automation for auto-assigned rows,
+        # otherwise show the admin/IT support full name.
+        assigned_by_display = (
+            "Automation" if row.is_auto_assigned else row.assigned_by
+        )
+
         data.append({
             "id": str(row.id),
             "desk_id": str(row.desk_id),
@@ -93,8 +103,12 @@ def get_assignments(
             "employee_code": row.employee_code,
             "employee_name": row.employee_name,
             "department": row.department,
-            "assigned_by": row.assigned_by,
+            "assigned_by": assigned_by_display,
             "assigned_date": str(row.assigned_date) if row.assigned_date else None,
+            "start_date": str(row.start_date) if row.start_date else None,
+            "end_date": str(row.end_date) if row.end_date else None,
+            "shift": row.shift,
+            "is_auto_assigned": bool(row.is_auto_assigned) if row.is_auto_assigned is not None else None,
             "assignment_type": row.assignment_type,
             "released_date": str(row.released_date) if row.released_date else None,
             "current_status": row.current_status

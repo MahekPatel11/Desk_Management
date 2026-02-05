@@ -125,7 +125,7 @@ const ITSupportUpdate = () => {
                   <option value="">Select desk...</option>
                   {desks.map(d => (
                     <option key={d.id} value={d.desk_number}>
-                      {d.desk_number} ({d.floor}) - {d.current_status}
+                      {d.desk_number} (Floor {Math.floor(parseInt(d.desk_number) / 100)}) - {d.current_status}
                     </option>
                   ))}
                 </select>

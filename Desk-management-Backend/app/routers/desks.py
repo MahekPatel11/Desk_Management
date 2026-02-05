@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from datetime import date, datetime
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.database.database import SessionLocal
 from app.models.desks import Desk
@@ -12,6 +15,8 @@ from app.models.users import User
 from app.utils.auth import require_role
 from app.utils.desk_utils import extract_floor_and_index
 from app.models.desk_status_history import DeskStatusHistory
+from app.models.departments import Department
+from app.models.desk_requests import DeskRequest
 
 # -------------------------------------------------
 # Router setup
@@ -21,7 +26,7 @@ router = APIRouter(
     tags=["Desks"]
 )
 
-# -------------------------------------------------http://127.0.0.1:8000 
+# -------------------------------------------------
 # Database dependency
 # -------------------------------------------------
 def get_db():
@@ -40,6 +45,10 @@ class AssignDeskRequest(BaseModel):
     assignment_type: str
     notes: str | None = None
     date: str | None = None
+    end_date: str | None = None
+    desk_request_id: str | None = None
+    shift: str | None = "MORNING"
+    is_reassignment: bool | None = False
 
 class UpdateDeskStatusRequest(BaseModel):
     current_status: str
@@ -58,7 +67,11 @@ def list_desks(
     size: int = Query(10, ge=1, le=50),
     db: Session = Depends(get_db)
 ):
-    query = db.query(Desk)
+    # Join departments so we can expose department info alongside desks
+    query = (
+        db.query(Desk, Department.name.label("department_name"))
+        .outerjoin(Department, Desk.department_id == Department.id)
+    )
 
     if status:
         query = query.filter(Desk.current_status == status)
@@ -68,18 +81,35 @@ def list_desks(
 
     total = query.count()
 
-    desks = (
+    rows = (
         query
         .offset((page - 1) * size)
         .limit(size)
         .all()
     )
 
+    # Serialize explicitly so we can include department_name while preserving
+    # the existing fields used by the frontend.
+    data = []
+    for desk, dept_name in rows:
+        data.append({
+            "id": desk.id,
+            "desk_number": desk.desk_number,
+            "floor": desk.floor,
+            "location": desk.location,
+            "floor_id": desk.floor_id,
+            "department_id": desk.department_id,
+            "department_name": dept_name,
+            "current_status": desk.current_status,
+            "created_at": desk.created_at.isoformat() if desk.created_at else None,
+            "updated_at": desk.updated_at.isoformat() if desk.updated_at else None,
+        })
+
     return {
         "total": total,
         "page": page,
         "size": size,
-        "data": desks
+        "data": data,
     }
 
 # -------------------------------------------------
@@ -102,21 +132,25 @@ def get_desk_by_id(
         "current_status": desk.current_status
     }
 
-# ...
-
+# -------------------------------------------------
+# POST /desks/assign-desk
+# -------------------------------------------------
 @router.post("/assign-desk")
 def assign_desk(
     request: AssignDeskRequest,
     db: Session = Depends(get_db),
     current_user=Depends(require_role(["ADMIN", "IT_SUPPORT"]))
 ):
+    print(f"DEBUG: Assigning desk {request.desk_id} to employee {request.employee_id}. is_reassignment={request.is_reassignment}")
     # Check desk exists
     desk = db.query(Desk).filter(Desk.id == request.desk_id).first()
     if not desk:
+        print(f"DEBUG: Desk {request.desk_id} not found")
         raise HTTPException(status_code=404, detail="Desk not found")
 
     # Desk must not be in MAINTENANCE or INACTIVE
     if desk.current_status in ["MAINTENANCE", "INACTIVE"]:
+        print(f"DEBUG: Desk {desk.desk_number} is in {desk.current_status} status")
         raise HTTPException(status_code=400, detail=f"Desk is in {desk.current_status} status and cannot be assigned")
 
     # Check employee exists
@@ -128,17 +162,57 @@ def assign_desk(
     if not employee:
         raise HTTPException(status_code=404, detail="Employee not found")
 
-    # If desk is ASSIGNED, release the current assignment(s)
-    if desk.current_status == "ASSIGNED":
-        active_desk_assignments = (
-            db.query(DeskAssignment)
-            .filter(DeskAssignment.desk_id == desk.id)
-            .filter(DeskAssignment.released_date == None)
-            .all()
-        )
-        for ad in active_desk_assignments:
-            ad.released_date = date.today()
+    # Determine assignment date and range
+    assignment_date = date.today()
+    if request.date:
+        try:
+             assignment_date = date.fromisoformat(request.date)
+        except ValueError:
+             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
     
+    start_date_obj = assignment_date
+    end_date_obj = assignment_date 
+    
+    if request.end_date:
+        try:
+            end_date_obj = date.fromisoformat(request.end_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid end_date format. Use YYYY-MM-DD")
+            
+    if end_date_obj < start_date_obj:
+         raise HTTPException(status_code=400, detail="End date cannot be before start date")
+
+    # Check for ALL overlapping active assignments for the same desk and shift
+    overlapping_assignments = (
+        db.query(DeskAssignment)
+        .filter(DeskAssignment.desk_id == desk.id)
+        .filter(DeskAssignment.released_date == None)
+        .filter(DeskAssignment.start_date <= end_date_obj)
+        .filter(DeskAssignment.end_date >= start_date_obj)
+        .filter(DeskAssignment.shift == (request.shift.upper() if request.shift else "MORNING"))
+        .all()
+    )
+
+    if overlapping_assignments:
+        if not request.is_reassignment:
+            clashing_names = []
+            for oa in overlapping_assignments:
+                emp = db.query(Employee).filter(Employee.id == oa.employee_id).first()
+                if emp:
+                    clashing_names.append(f"{emp.name} ({oa.shift} shift, {oa.start_date} to {oa.end_date})")
+            
+            detail_msg = "Desk is already assigned to: " + ", ".join(clashing_names)
+            print(f"DEBUG: Clash detected. {detail_msg}")
+            raise HTTPException(status_code=400, detail=detail_msg)
+        else:
+            # Release ALL overlapping assignments
+            for oa in overlapping_assignments:
+                print(f"DEBUG: Releasing overlapping assignment {oa.id} for seamless reassignment")
+                oa.released_date = date.today()
+            # If the reassignment is for a future date, we should probably ensure 
+            # the person's end_date is adjusted, but for now, releasing it (ending it today)
+            # satisfies the clash-free check for create.
+
     # Check if this employee already has any active assignments elsewhere and release them
     existing_assignments = (
         db.query(DeskAssignment)
@@ -154,30 +228,34 @@ def assign_desk(
         if old_desk and old_desk.current_status == "ASSIGNED":
             old_desk.current_status = "AVAILABLE"
 
-    # Determine assignment date
-    assignment_date = date.today()
-    if request.date:
-        try:
-             assignment_date = date.fromisoformat(request.date)
-        except ValueError:
-             raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-
     # Create assignment
     assignment = DeskAssignment(
         id=str(uuid.uuid4()),
         desk_id=desk.id,
         employee_id=employee.id,
         assigned_by=current_user.id,
-        assigned_date=assignment_date,
+        assigned_date=date.today(),
         assignment_type=request.assignment_type,
+        shift=request.shift.upper() if request.shift else "MORNING",
+        start_date=start_date_obj,
+        end_date=end_date_obj,
+        is_auto_assigned=False,
         notes=request.notes
     )
 
-    # Update desk status
-    # Track old status
-    old_status = desk.current_status
+    # If this assignment is linked to a request, update that request
+    if request.desk_request_id:
+        linked_request = (
+            db.query(DeskRequest)
+            .filter(DeskRequest.id == request.desk_request_id)
+            .first()
+        )
+        if linked_request:
+            linked_request.status = "APPROVED"
+            linked_request.assigned_desk_id = desk.id
 
     # Update desk status
+    old_status = desk.current_status
     desk.current_status = "ASSIGNED"
 
     # Insert desk status history
@@ -187,17 +265,13 @@ def assign_desk(
         old_status=old_status,
         new_status="ASSIGNED",
         changed_by=current_user.id,
-        reason="Assigned to employee",
+        reason=f"Assigned to {employee.name} ({employee.employee_code})",
         notes=request.notes,
         expected_resolution_date=None,
         changed_at=date.today()
     )
 
- 
-
     db.add(history)
-
-
     db.add(assignment)
     db.commit()
     db.refresh(assignment)
@@ -218,7 +292,7 @@ def update_desk_status_by_number(
     desk_number: int,
     request: UpdateDeskStatusRequest,
     db: Session = Depends(get_db),
-    current_user=Depends(require_role(["ADMIN", "IT_SUPPORT"])) # Corrected role name
+    current_user=Depends(require_role(["ADMIN", "IT_SUPPORT"]))
 ):
     # Validate desk number format & extract floor
     try:
@@ -235,13 +309,6 @@ def update_desk_status_by_number(
     if not desk:
         raise HTTPException(status_code=404, detail="Desk not found")
 
-    # Business rule: IT Support can update status of any desk, but be careful with ASSIGNED
-    # If the user wants to allow updating assigned desks, we remove the block
-    # For now, let's keep it but maybe IT Support needs to put an assigned desk into maintenance
-    # if it's broken. We will allow IT_SUPPORT to bypass if they provide a reason.
-    # if desk.current_status == "ASSIGNED" and current_user.role != "IT_SUPPORT":
-    #    raise HTTPException(status_code=400, detail="Cannot change status of an assigned desk")
-
     # Track old status
     old_status = desk.current_status
 
@@ -256,25 +323,22 @@ def update_desk_status_by_number(
         try:
             expected_res_date = date.fromisoformat(request.expected_resolution_date)
         except ValueError:
-            # Fallback or keep as None if format is bad
             pass
 
     # Insert desk status history
     history = DeskStatusHistory(
-         id=str(uuid.uuid4()),
-         desk_id=desk.id,
-         old_status=old_status,
-         new_status=request.current_status,
-         changed_by=current_user.id,
-         reason=request.reason or "Manual status update",
-         notes=request.notes,
-         expected_resolution_date=expected_res_date,
-         changed_at=datetime.utcnow()
+        id=str(uuid.uuid4()),
+        desk_id=desk.id,
+        old_status=old_status,
+        new_status=request.current_status,
+        changed_by=current_user.id,
+        reason=request.reason or "Manual status update",
+        notes=request.notes,
+        expected_resolution_date=expected_res_date,
+        changed_at=datetime.utcnow()
     )
 
     db.add(history)
-
-
     db.commit()
     db.refresh(desk)
 
@@ -290,7 +354,7 @@ def update_desk_status_by_number(
 # -------------------------------------------------
 @router.get("/by-number/{desk_number}/history")
 def get_desk_history_by_number(
-    desk_number: int,
+    desk_number: str,
     db: Session = Depends(get_db),
     current_user=Depends(require_role(["ADMIN", "IT_SUPPORT", "EMPLOYEE"]))
 ):
@@ -313,15 +377,9 @@ def get_desk_history_by_number(
     # Format history for frontend
     formatted_history = []
     for entry, user_name in history_entries:
-        # Check if this was an assignment to include employee name if possible
         text = entry.reason
-        if entry.new_status == "ASSIGNED":
-            # Try to find the assignment record created around the same time
-            # For simplicity, we can just say "by Admin Name"
-            text = f"Status changed to {entry.new_status} by {user_name}. Reason: {entry.reason}"
-        else:
-            text = f"Status changed to {entry.new_status} by {user_name}. Reason: {entry.reason}"
-
+        # (Optional) Enhance text logic if needed, but 'reason' should already 
+        # contain the rich info we added in assign_desk
         formatted_history.append({
             "date": entry.changed_at.strftime("%b %d, %Y - %I:%M %p"),
             "text": text,

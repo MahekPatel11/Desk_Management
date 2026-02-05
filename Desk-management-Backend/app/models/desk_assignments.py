@@ -5,7 +5,8 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
-    Text
+    Text,
+    Boolean,
 )
 from datetime import datetime
 
@@ -43,6 +44,19 @@ class DeskAssignment(Base):
         Enum("PERMANENT", "TEMPORARY", name="assignment_type_enum"),
         nullable=False
     )
+
+    # Time‑bound, shift‑aware booking fields
+    shift = Column(
+        Enum("MORNING", "NIGHT", name="assignment_shift_enum"),
+        nullable=False,
+    )
+
+    # Explicit date range for booking
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+
+    # Flag to indicate if this assignment was created by auto‑assignment
+    is_auto_assigned = Column(Boolean, default=False, nullable=False)
 
     notes = Column(Text, nullable=True)
 

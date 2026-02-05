@@ -1,22 +1,13 @@
-FROM node:20-alpine AS build
+FROM node:20-alpine AS frontend
 
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 
 COPY . .
-RUN npm run build
 
+EXPOSE 3000
 
-FROM nginx:1.27-alpine AS frontend
-
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Nginx config will proxy API routes to backend container
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-
-EXPOSE 80
-
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["npm", "run", "dev"]
 

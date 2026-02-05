@@ -35,6 +35,7 @@ const ResetPassword = () => {
 
     try {
       setLoading(true);
+      const trimmedPassword = newPassword.trim();
 
       const response = await fetch("/auth/reset-password", {
         method: "POST",
@@ -43,7 +44,7 @@ const ResetPassword = () => {
         },
         body: JSON.stringify({
           token,
-          new_password: newPassword,
+          new_password: trimmedPassword,
         }),
       });
 

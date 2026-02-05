@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Enum, Integer
+from sqlalchemy import Column, String, DateTime, Enum, Integer, ForeignKey
 from datetime import datetime
 
 from app.database.database import Base
@@ -11,6 +11,16 @@ class Desk(Base):
     desk_number = Column(String(50), unique=True, nullable=False)
     floor = Column(Integer, nullable=False)
     location = Column(String(255), nullable=True)
+    floor_id = Column(
+        String(36),
+        ForeignKey("floors.id"),
+        nullable=True
+    )
+    department_id = Column(
+        String(36),
+        ForeignKey("departments.id"),
+        nullable=True
+    )
     current_status = Column(
         Enum(
             "AVAILABLE",

@@ -8,18 +8,20 @@ const Login = () => {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [role, setRole] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
+      const normalizedPassword = password.trim();
+
       const response = await fetch("/auth/login", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password, role }),
+        body: JSON.stringify({ email: normalizedEmail, password: normalizedPassword }),
       });
 
       const data = await response.json();
@@ -31,7 +33,7 @@ const Login = () => {
       // Store token and role
       localStorage.setItem("token", data.access_token);
       localStorage.setItem("role", data.role);
-      localStorage.setItem("userEmail", email);
+      localStorage.setItem("userEmail", normalizedEmail);
 
       toast.success(`Welcome back! Logged in as ${data.role}`);
 
@@ -62,13 +64,14 @@ const Login = () => {
     }
 
     try {
+      const normalizedEmail = email.trim().toLowerCase();
       // Ask backend to create a short‑lived reset token for this email
       const response = await fetch("/auth/forgot-password", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
       });
 
       const data = await response.json();
@@ -125,23 +128,6 @@ const Login = () => {
               onChange={(e) => setPassword(e.target.value)}
               required
             />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">
-              Select Role
-            </label>
-            <select
-              className="w-full px-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              required
-            >
-              <option value="">Choose your role</option>
-              <option value="EMPLOYEE">Employee</option>
-              <option value="ADMIN">Admin / Manager</option>
-              <option value="IT_SUPPORT">IT Support</option>
-            </select>
           </div>
 
           <button

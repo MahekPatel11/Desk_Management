@@ -41,27 +41,36 @@ const ITSupportDashboard = () => {
   }, []);
 
   const filteredDesks = desks.filter(d => {
-    const assignment = assignments.find(a =>
-      a.desk_number === d.desk_number &&
-      (a.released_date === null || a.released_date === "None")
-    );
-    
+    const assignment = assignments
+      .filter(a => a.desk_number === d.desk_number && (a.released_date === null || a.released_date === "None"))
+      .sort((a, b) => new Date(b.assigned_date) - new Date(a.assigned_date))[0];
+
     const searchLower = search.toLowerCase();
     const updatedDate = d.updated_at ? new Date(d.updated_at).toLocaleDateString() : "";
     // Ensure floor is numeric
-    const floorNum = typeof d.floor === 'number' ? d.floor : parseInt(d.floor, 10);
-    const displayFloor = `Floor ${floorNum}`;
-    
+    const floorFromDeskNum = Math.floor(parseInt(d.desk_number) / 100);
+    const displayFloor = `Floor ${floorFromDeskNum}`;
+
     const matchesSearch = search === "" ||
       d.desk_number.toString().toLowerCase().includes(searchLower) ||
-      floorNum.toString().toLowerCase().includes(searchLower) ||
+      floorFromDeskNum.toString().toLowerCase().includes(searchLower) ||
       displayFloor.toLowerCase().includes(searchLower) ||
       updatedDate.toLowerCase().includes(searchLower) ||
       (assignment && assignment.employee_name.toLowerCase().includes(searchLower));
-    
+
+    // Compute display status based on current date
+    const status =
+      d.current_status === "MAINTENANCE"
+        ? "MAINTENANCE"
+        : d.current_status === "INACTIVE"
+          ? "INACTIVE"
+          : assignment
+            ? "ASSIGNED"
+            : "AVAILABLE";
+
     return matchesSearch &&
-      (statusFilter === "All" || d.current_status === statusFilter) &&
-      (floorFilter === "All" || floorNum.toString() === floorFilter);
+      (statusFilter === "All" || status === statusFilter) &&
+      (floorFilter === "All" || floorFromDeskNum.toString() === floorFilter);
   });
 
   return (
@@ -94,11 +103,42 @@ const ITSupportDashboard = () => {
 
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5 mb-8">
-          <Stat title="Total Desks" value={desks.length} icon="🪑" color="blue" />
-          <Stat title="Available" value={desks.filter(d => d.current_status === "AVAILABLE").length} icon="✓" color="green" />
-          <Stat title="Under Maintenance" value={desks.filter(d => d.current_status === "MAINTENANCE").length} icon="⚠" color="orange" />
-          <Stat title="Assigned" value={desks.filter(d => d.current_status === "ASSIGNED").length} icon="●" color="purple" />
-          <Stat title="Inactive" value={desks.filter(d => d.current_status === "INACTIVE").length} icon="🚫" color="red" />
+          {(() => {
+            const hasCurrentAssignment = (desk) =>
+              assignments.some(
+                (a) =>
+                  a.desk_number === desk.desk_number &&
+                  (a.released_date === null || a.released_date === "None")
+              );
+            const total = desks.length;
+            const assigned = desks.filter((d) => hasCurrentAssignment(d)).length;
+            const available = desks.filter(
+              (d) =>
+                !["MAINTENANCE", "INACTIVE"].includes(d.current_status) &&
+                !hasCurrentAssignment(d)
+            ).length;
+            const maintenance = desks.filter(
+              (d) => d.current_status === "MAINTENANCE"
+            ).length;
+            const inactive = desks.filter(
+              (d) => d.current_status === "INACTIVE"
+            ).length;
+
+            return (
+              <>
+                <Stat title="Total Desks" value={total} icon="🪑" color="blue" />
+                <Stat title="Available" value={available} icon="✓" color="green" />
+                <Stat
+                  title="Under Maintenance"
+                  value={maintenance}
+                  icon="⚠"
+                  color="orange"
+                />
+                <Stat title="Assigned" value={assigned} icon="●" color="purple" />
+                <Stat title="Inactive" value={inactive} icon="🚫" color="red" />
+              </>
+            );
+          })()}
         </div>
 
         {/* Content Card */}
@@ -159,18 +199,19 @@ const ITSupportDashboard = () => {
 
               <tbody>
                 {filteredDesks.map(d => {
-                  const assignment = assignments.find(a =>
-                    a.desk_number === d.desk_number &&
-                    (a.released_date === null || a.released_date === "None")
-                  );
+                  const assignment = assignments
+                    .filter(a => a.desk_number === d.desk_number && (a.released_date === null || a.released_date === "None"))
+                    .sort((a, b) => new Date(b.assigned_date) - new Date(a.assigned_date))[0];
 
                   return (
                     <tr key={d.id} className="hover:bg-[#f8f9fa] border-b">
                       <td className="p-4 font-semibold">{d.desk_number}</td>
-                      <td>Floor {typeof d.floor === 'number' ? d.floor : parseInt(d.floor, 10)}</td>
+                      <td>Floor {Math.floor(parseInt(d.desk_number) / 100)}</td>
                       <td className="text-sm">
                         {assignment ? (
-                          <span className="font-semibold">{assignment.employee_name}</span>
+                          <span className="font-semibold">
+                            {assignment.employee_name} ({assignment.shift})
+                          </span>
                         ) : (
                           <span className="text-gray-400">—</span>
                         )}

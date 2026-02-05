@@ -6,6 +6,9 @@ export const DeskContext = createContext(null);
 const DeskProvider = ({ children }) => {
   const [desks, setDesks] = useState([]);
   const [employees, setEmployees] = useState([]);
+  const [deskRequests, setDeskRequests] = useState([]);
+  const [myDeskRequests, setMyDeskRequests] = useState([]);
+  const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
 
   const fetchDesks = async () => {
@@ -44,8 +47,6 @@ const DeskProvider = ({ children }) => {
     }
   };
 
-  const [assignments, setAssignments] = useState([]);
-
   const fetchAssignments = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -63,10 +64,52 @@ const DeskProvider = ({ children }) => {
     }
   };
 
+  const fetchDeskRequests = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return [];
+      const response = await fetch("/api/desk-requests/", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setDeskRequests(Array.isArray(data) ? data : []);
+        return data;
+      }
+      return [];
+    } catch (error) {
+      console.error("Error fetching desk requests:", error);
+      return [];
+    }
+  };
+
+  const fetchMyDeskRequests = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return [];
+      const response = await fetch("/api/desk-requests/me", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await response.json();
+      if (response.ok) {
+        setMyDeskRequests(Array.isArray(data) ? data : []);
+        return data;
+      }
+      return [];
+    } catch (error) {
+      console.error("Error fetching my desk requests:", error);
+      return [];
+    }
+  };
+
   const assignDesk = async (assignmentData) => {
     try {
       const token = localStorage.getItem("token");
-      
+
       // Validate required fields
       if (!assignmentData.desk_id) {
         toast.error("Please select a desk");
@@ -76,7 +119,7 @@ const DeskProvider = ({ children }) => {
         toast.error("Please select an employee");
         return false;
       }
-      
+
       const response = await fetch("/api/desks/assign-desk", {
         method: "POST",
         headers: {
@@ -96,6 +139,7 @@ const DeskProvider = ({ children }) => {
       // Refresh data
       fetchDesks();
       fetchAssignments();
+      fetchDeskRequests();
       return true;
     } catch (error) {
       toast.error(error.message);
@@ -136,30 +180,98 @@ const DeskProvider = ({ children }) => {
     }
   };
 
+  const createDeskRequest = async (requestData) => {
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) {
+        toast.error("You must be logged in to request a desk");
+        return null;
+      }
+
+      const response = await fetch("/api/desk-requests/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(requestData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || data.error || "Failed to create desk request");
+      }
+
+      toast.success(
+        data.assigned_desk
+          ? "Desk requested and auto-assigned successfully!"
+          : "Desk request created successfully"
+      );
+
+      // Refresh to pick up any new assignments
+      fetchDesks();
+      fetchAssignments();
+      fetchEmployees();
+
+      return data;
+    } catch (error) {
+      toast.error(error.message || "Unable to create desk request");
+      return null;
+    }
+  };
+
   useEffect(() => {
     // Initial fetch if logged in
     const token = localStorage.getItem("token");
     if (token) {
-      Promise.all([fetchDesks(), fetchEmployees(), fetchAssignments()]).finally(() => setLoading(false));
+      const role = localStorage.getItem("role");
+      const fetches = [fetchDesks(), fetchEmployees(), fetchAssignments()];
+      if (role === "ADMIN") fetches.push(fetchDeskRequests());
+      if (role === "EMPLOYEE") fetches.push(fetchMyDeskRequests());
+
+      Promise.all(fetches).finally(() => setLoading(false));
     } else {
       setLoading(false);
     }
 
-    // Set up polling for background updates every 30 seconds
+    // Set up polling for background updates every 60 seconds (reduced from 30s to improve performance)
     const interval = setInterval(() => {
       const activeToken = localStorage.getItem("token");
       if (activeToken) {
+        const role = localStorage.getItem("role");
         fetchDesks();
         fetchEmployees();
         fetchAssignments();
+        if (role === "ADMIN") fetchDeskRequests();
+        if (role === "EMPLOYEE") fetchMyDeskRequests();
       }
-    }, 30000);
+    }, 60000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+    };
   }, []);
 
   return (
-    <DeskContext.Provider value={{ desks, employees, assignments, assignDesk, updateDeskStatus, fetchDesks, fetchEmployees, fetchAssignments, loading }}>
+    <DeskContext.Provider
+      value={{
+        desks,
+        employees,
+        assignments,
+        assignDesk,
+        updateDeskStatus,
+        fetchDesks,
+        fetchEmployees,
+        fetchAssignments,
+        createDeskRequest,
+        fetchDeskRequests,
+        fetchMyDeskRequests,
+        deskRequests,
+        myDeskRequests,
+        loading,
+      }}
+    >
       {children}
     </DeskContext.Provider>
   );

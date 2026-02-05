@@ -17,6 +17,7 @@ def upgrade():
     # Use SQLAlchemy metadata to create all tables
     from app.database.database import engine
     from app.database.database import Base
+    from app import models  # Ensure all models are registered
 
     Base.metadata.create_all(bind=engine)
 

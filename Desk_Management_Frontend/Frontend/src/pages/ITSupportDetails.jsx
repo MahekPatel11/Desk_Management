@@ -131,7 +131,7 @@ const ITSupportDetails = () => {
             </div>
             <div className="bg-[#f8f9fa] p-5 rounded-lg">
               <div className="text-xs text-gray-500 font-semibold uppercase mb-2">Location</div>
-              <div className="text-md font-semibold">{desk.floor}</div>
+              <div className="text-md font-semibold">Floor {Math.floor(parseInt(desk.desk_number) / 100)}</div>
             </div>
             <div className="bg-[#f8f9fa] p-5 rounded-lg">
               <div className="text-xs text-gray-500 font-semibold uppercase mb-2">Current Status</div>
@@ -155,11 +155,10 @@ const ITSupportDetails = () => {
               <div className="text-xs text-gray-500 font-semibold uppercase mb-2">Assigned To</div>
               <div className="text-md font-semibold">
                 {(() => {
-                  const assignment = assignments.find(a =>
-                    a.desk_number === desk.desk_number &&
-                    (a.released_date === null || a.released_date === "None")
-                  );
-                  return assignment ? `${assignment.employee_name} (${assignment.department})` : "—";
+                  const assignment = assignments
+                    .filter(a => a.desk_number === desk.desk_number && (a.released_date === null || a.released_date === "None"))
+                    .sort((a, b) => new Date(b.assigned_date) - new Date(a.assigned_date))[0];
+                  return assignment ? `${assignment.employee_name} (${assignment.department}) - ${assignment.shift}` : "—";
                 })()}
               </div>
             </div>

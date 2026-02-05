@@ -1,6 +1,7 @@
 import { useState, useContext, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { DeskContext } from "./DeskContext";
+import { toast } from "react-toastify";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -8,8 +9,15 @@ const AdminDashboard = () => {
   const [status, setStatus] = useState("All");
   const [floor, setFloor] = useState("All");
 
-  const { desks, assignments, employees, fetchDesks, fetchAssignments, fetchEmployees } = useContext(DeskContext);
+  const { desks, assignments, employees, fetchDesks, fetchAssignments, fetchEmployees, fetchDeskRequests, deskRequests } = useContext(DeskContext);
   const [userProfile, setUserProfile] = useState(null);
+  const [autoAssignEnabled, setAutoAssignEnabled] = useState(false);
+  const [floors, setFloors] = useState([]);
+  const [newFloorName, setNewFloorName] = useState("");
+  const [newFloorNumber, setNewFloorNumber] = useState("");
+  const [newFloorDept, setNewFloorDept] = useState("");
+  const [newDeptName, setNewDeptName] = useState("");
+  const [newDeptFloorId, setNewDeptFloorId] = useState("");
 
   // Get user profile from JWT token
   useEffect(() => {
@@ -28,6 +36,26 @@ const AdminDashboard = () => {
         name: payload.full_name || "Admin",
         role: payload.role === "ADMIN" ? "Administrator" : payload.role
       });
+
+      // Fetch auto-assignment setting for admins
+      const fetchAutoAssignment = async () => {
+        try {
+          const token = localStorage.getItem("token");
+          const res = await fetch("/api/settings/auto-assignment", {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
+          const data = await res.json();
+          if (res.ok && typeof data.enabled === "boolean") {
+            setAutoAssignEnabled(data.enabled);
+          }
+        } catch (e) {
+          console.error("Error fetching auto-assignment setting", e);
+        }
+      };
+
+      fetchAutoAssignment();
     } catch (e) {
       console.error("Error decoding token", e);
       navigate("/login");
@@ -41,11 +69,74 @@ const AdminDashboard = () => {
     fetchEmployees();
   }, []);
 
+  const fetchFloors = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch("/api/admin-config/floors", {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && Array.isArray(data)) {
+        const sortedFloors = [...data].sort((a, b) => a.number - b.number);
+        setFloors(sortedFloors);
+      }
+    } catch (e) {
+      console.error("Error fetching floors", e);
+    }
+  };
+
+  // Load floors for configuration forms
+  useEffect(() => {
+    fetchFloors();
+  }, []);
+
+  // No longer need manual load here as context handles it and we use useMemo below
+  useEffect(() => {
+    fetchDeskRequests();
+  }, [fetchDeskRequests]);
+
+  // Derive pending requests from context data
+  const pendingRequests = useMemo(() => {
+    return Array.isArray(deskRequests) ? deskRequests.filter(r => r.status === "PENDING") : [];
+  }, [deskRequests]);
+
+  const toggleAutoAssignment = async () => {
+    try {
+      const token = localStorage.getItem("token");
+      const nextValue = !autoAssignEnabled;
+      const res = await fetch("/api/settings/auto-assignment", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ enabled: nextValue }),
+      });
+      if (res.ok) {
+        setAutoAssignEnabled(nextValue);
+      }
+    } catch (e) {
+      console.error("Error updating auto-assignment setting", e);
+    }
+  };
+
   // Calculate dynamic stats from real data
   const stats = useMemo(() => {
     const totalDesks = desks.length;
-    const assignedDesks = desks.filter(d => d.current_status === "ASSIGNED").length;
-    const availableDesks = desks.filter(d => d.current_status === "AVAILABLE").length;
+    const todayIso = new Date().toISOString().split("T")[0];
+
+    const hasCurrentAssignment = (desk) =>
+      assignments.some(a =>
+        a.desk_number === desk.desk_number &&
+        (a.released_date === null || a.released_date === "None")
+      );
+
+    const assignedDesks = desks.filter(d => hasCurrentAssignment(d)).length;
+    const availableDesks = desks.filter(d =>
+      !["MAINTENANCE", "INACTIVE"].includes(d.current_status) && !hasCurrentAssignment(d)
+    ).length;
     const maintenanceDesks = desks.filter(d => d.current_status === "MAINTENANCE").length;
     const inactiveDesks = desks.filter(d => d.current_status === "INACTIVE").length;
 
@@ -60,10 +151,10 @@ const AdminDashboard = () => {
 
   // Process desks with assignment data
   const processedDesks = desks.map(desk => {
-    const activeAssignment = assignments.find(a =>
-      a.desk_number === desk.desk_number &&
-      (a.released_date === null || a.released_date === "None")
-    );
+    const todayIso = new Date().toISOString().split("T")[0];
+    const latestAssignment = [...assignments]
+      .filter(a => a.desk_number === desk.desk_number && (a.released_date === null || a.released_date === "None"))
+      .sort((a, b) => new Date(b.assigned_date) - new Date(a.assigned_date))[0];
 
     // Ensure floor is numeric
     const floorNum = typeof desk.floor === 'number' ? desk.floor : parseInt(desk.floor, 10);
@@ -75,18 +166,24 @@ const AdminDashboard = () => {
       desk: desk.desk_number,
       floor: floorNum,
       location: location,
-      status: desk.current_status === "ASSIGNED" ? "Assigned" :
-        desk.current_status === "AVAILABLE" ? "Available" :
-          desk.current_status === "MAINTENANCE" ? "Maintenance" :
-            desk.current_status === "INACTIVE" ? "Inactive" : desk.current_status,
-      user: activeAssignment ? (activeAssignment.employee_name || activeAssignment.employee_code) : "—",
-      date: activeAssignment ? activeAssignment.assigned_date : (desk.updated_at ? desk.updated_at.split('T')[0] : "—"),
-      department: activeAssignment ? (activeAssignment.department || "—") : "—",
-      employeeId: activeAssignment ? activeAssignment.employee_code : "—",
-      employeeDbId: activeAssignment ? activeAssignment.employee_id : null,
+      status:
+        desk.current_status === "MAINTENANCE"
+          ? "Maintenance"
+          : desk.current_status === "INACTIVE"
+            ? "Inactive"
+            : latestAssignment
+              ? "Assigned"
+              : "Available",
+      user: latestAssignment
+        ? `${latestAssignment.employee_name || latestAssignment.employee_code} (${latestAssignment.shift || "—"})`
+        : "—",
+      date: latestAssignment ? latestAssignment.assigned_date : (desk.updated_at ? desk.updated_at.split('T')[0] : "—"),
+      department: latestAssignment ? (latestAssignment.department || "—") : "—",
+      employeeId: latestAssignment ? latestAssignment.employee_code : "—",
+      employeeDbId: latestAssignment ? latestAssignment.employee_id : null,
       deskDbId: desk.id,
-      assignedBy: activeAssignment ? activeAssignment.assigned_by : (desk.current_status === "AVAILABLE" ? "—" : "System"),
-      notes: activeAssignment ? activeAssignment.notes : ""
+      assignedBy: latestAssignment ? latestAssignment.assigned_by : (desk.current_status === "AVAILABLE" ? "—" : "System"),
+      notes: latestAssignment ? latestAssignment.notes : ""
     };
   });
 
@@ -112,10 +209,17 @@ const AdminDashboard = () => {
           </div>
 
           <div className="flex items-center gap-4 text-right">
-            <div>
+            <div className="text-right">
               <div className="font-semibold">{userProfile ? userProfile.name : "Loading..."}</div>
               <div className="text-xs text-[#7f8c8d]">{userProfile ? userProfile.role : "Admin"}</div>
             </div>
+            <button
+              type="button"
+              onClick={toggleAutoAssignment}
+              className="px-4 py-2 bg-[#f1f5f9] text-[#334155] rounded-md text-xs font-semibold border border-[#e2e8f0]"
+            >
+              Auto-assign: {autoAssignEnabled ? "On" : "Off"}
+            </button>
             <button
               onClick={() => navigate("/")}
               className="px-5 py-2 bg-[#e74c3c] text-white rounded-md font-semibold text-sm"
@@ -147,6 +251,204 @@ const AdminDashboard = () => {
             </div>
           ))}
         </div>
+
+        {/* Configuration - Floors and Departments */}
+        <div className="bg-white p-5 rounded-xl shadow mb-6">
+          <h2 className="text-lg font-bold mb-4">Configuration</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Add Floor */}
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Add Floor</h3>
+              <div className="flex flex-col gap-3">
+                <input
+                  type="number"
+                  placeholder="Floor number (e.g., 5)"
+                  className="border-2 rounded-lg px-3 py-2 text-sm"
+                  value={newFloorNumber}
+                  onChange={(e) => setNewFloorNumber(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!newFloorNumber) return;
+                    try {
+                      const token = localStorage.getItem("token");
+                      const res = await fetch("/api/admin-config/floors", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                          name: `Floor ${newFloorNumber}`,
+                          number: Number(newFloorNumber),
+                        }),
+                      });
+                      let data;
+                      try {
+                        const text = await res.text();
+                        try {
+                          data = JSON.parse(text);
+                        } catch (e) {
+                          data = { detail: text || "Server error. Please try again later." };
+                        }
+                      } catch (err) {
+                        data = { detail: "Failed to read server response." };
+                      }
+                      if (res.ok) {
+                        toast.success("Floor created successfully!");
+                        fetchFloors();
+                        setNewFloorName("");
+                        setNewFloorNumber("");
+                        setNewFloorDept("");
+                      } else {
+                        toast.error(data.detail || "Failed to create floor");
+                        console.error("Failed to create floor", data);
+                      }
+                    } catch (e) {
+                      toast.error("Could not connect to server");
+                      console.error("Error creating floor", e);
+                    }
+                  }}
+                  className="self-start px-4 py-2 bg-[#667eea] text-white rounded-md text-xs font-semibold"
+                >
+                  Add Floor
+                </button>
+              </div>
+            </div>
+
+            {/* Add Department */}
+            <div>
+              <h3 className="text-sm font-semibold mb-2">Add Department</h3>
+              <div className="flex flex-col gap-3">
+                <input
+                  type="text"
+                  placeholder="Department name (e.g., Sales)"
+                  className="border-2 rounded-lg px-3 py-2 text-sm"
+                  value={newDeptName}
+                  onChange={(e) => setNewDeptName(e.target.value)}
+                />
+                <select
+                  className="border-2 rounded-lg px-3 py-2 text-sm"
+                  value={newDeptFloorId}
+                  onChange={(e) => setNewDeptFloorId(e.target.value)}
+                >
+                  <option value="">Select floor</option>
+                  {floors.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      Floor {f.number} {f.departments && f.departments.length > 0 ? `(${f.departments[0].name})` : "(Unassigned)"}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!newDeptName || !newDeptFloorId) return;
+                    try {
+                      const token = localStorage.getItem("token");
+                      const res = await fetch("/api/admin-config/departments", {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify({
+                          name: newDeptName,
+                          floor_id: newDeptFloorId,
+                        }),
+                      });
+                      let data;
+                      try {
+                        const text = await res.text();
+                        try {
+                          data = JSON.parse(text);
+                        } catch (e) {
+                          data = { detail: text || "Server error. Please try again later." };
+                        }
+                      } catch (err) {
+                        data = { detail: "Failed to read server response." };
+                      }
+                      if (res.ok) {
+                        toast.success("Department added successfully!");
+                        fetchFloors();
+                        setNewDeptName("");
+                        setNewDeptFloorId("");
+                      } else {
+                        toast.error(data.detail || "Failed to create department");
+                        console.error("Failed to create department", data);
+                      }
+                    } catch (e) {
+                      toast.error("Could not connect to server");
+                      console.error("Error creating department", e);
+                    }
+                  }}
+                  className="self-start px-4 py-2 bg-[#667eea] text-white rounded-md text-xs font-semibold"
+                >
+                  Add Department
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Pending Desk Requests */}
+        {pendingRequests.length > 0 && (
+          <div className="bg-white p-5 rounded-xl shadow mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold">Pending Desk Requests</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-100">
+                  <tr>
+                    {["Employee", "Department", "Shift", "From", "To", "Actions"].map((h) => (
+                      <th key={h} className="p-3 text-left">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {pendingRequests.map((r) => (
+                    <tr key={r.id} className="border-b hover:bg-gray-50">
+                      <td className="p-3">
+                        {r.employee_name}
+                      </td>
+                      <td className="p-3">{r.department}</td>
+                      <td className="p-3">{r.shift}</td>
+                      <td className="p-3">{r.from_date}</td>
+                      <td className="p-3">{r.to_date}</td>
+                      <td className="p-3">
+                        <button
+                          type="button"
+                          className="px-4 py-1 bg-[#667eea] text-white rounded-md text-xs font-semibold"
+                          onClick={() =>
+                            navigate("/assign-desk", {
+                              state: {
+                                mode: "assign",
+                                desk_request_id: r.id,
+                                requested_shift: r.shift,
+                                requested_from_date: r.from_date,
+                                requested_to_date: r.to_date,
+                                requested_employee_code: r.employee_code,
+                                employeeId: r.employee_code,
+                                employee: r.employee_id,
+                                employee_name: r.employee_name,
+                                department: r.department,
+                              },
+                            })
+                          }
+                        >
+                          Assign Desk
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* Desk Inventory - Now Dynamic */}
         <div className="bg-white p-2 rounded-xl shadow">
@@ -185,10 +487,12 @@ const AdminDashboard = () => {
               className="border-2 rounded-lg px-4 py-2"
               onChange={(e) => setFloor(e.target.value)}
             >
-              <option value="All">All</option>
-              <option value="1">Floor 1</option>
-              <option value="2">Floor 2</option>
-              <option value="3">Floor 3</option>
+              <option value="All">All Floors</option>
+              {floors.map(f => (
+                <option key={f.id} value={f.number.toString()}>
+                  Floor {f.number}
+                </option>
+              ))}
             </select>
           </div>
 

@@ -3,3 +3,7 @@ from app.models.employees import Employee
 from app.models.desks import Desk
 from app.models.desk_assignments import DeskAssignment
 from app.models.desk_status_history import DeskStatusHistory
+from app.models.floors import Floor
+from app.models.departments import Department
+from app.models.desk_requests import DeskRequest
+from app.models.system_settings import SystemSettings
