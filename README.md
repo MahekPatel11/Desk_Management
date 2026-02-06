@@ -42,7 +42,15 @@ Ideally suited for hybrid work models, the system supports:
 
 ---
 
-## 🚀 Setup and Run Instructions
+## �️ Database Design
+
+The system uses a normalized relational database schema to manage the complex relationships between Users, Employees, Desks, and Shifts.
+
+![ER Diagram](er_diagram.png)
+
+---
+
+## �🚀 Setup and Run Instructions
 
 ### Prerequisites
 *   [Docker Desktop](https://www.docker.com/products/docker-desktop) installed and running.
@@ -63,8 +71,8 @@ Ideally suited for hybrid work models, the system supports:
     ```
 
 3.  **Access the Application**
-    *   **Local**: [http://localhost:3000/](http://localhost:80)
-    *   **Network**: [http://172.18.0.4:3000/](http://172.18.0.x:80) 
+    *   **Local**: [http://localhost:3000/](http://localhost:3000)
+    *   **Network**: Check your local IP (e.g., http://192.168.1.x:3000)
     *   **Backend API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
 
 4.  **Stop the Application**
@@ -132,6 +140,13 @@ The database is seeded with the following default accounts for testing:
 | **Employee** | `john.anderson@company.com` | `employee@123` |
 | **Employee** | `neha.patel@company.com` | `employee@123` |
 
+---
+
+---
+
+## 🔐 ER Diagram
+
+![alt text](ER_Diagram_image.png)
 ---
 
 ## ✅ Learning Outcomes

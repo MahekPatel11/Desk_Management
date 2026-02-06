@@ -8,11 +8,12 @@ echo "Waiting for database to be ready..."
 # We'll use a simple loop or just rely on the healthcheck if we're sure.
 # Actually, let's just run migrations.
 
-echo "Running migrations..."
+# Run migrations
 alembic upgrade head
 
-# Uncomment the following line if you want to seed the database on every startup (CAUTION: drops data)
-python seed_db.py
+# Seed the database ONLY if needed. 
+# You can run this once to setup, then comment it out to keep your data.
+# python seed_db.py
 
 echo "Starting Backend API..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload

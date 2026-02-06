@@ -113,74 +113,67 @@ def create_department(
     db: Session = Depends(get_db),
     current_user=Depends(require_role("ADMIN")),
 ):
-    floor = (
-        db.query(Floor)
-        .filter(Floor.id == payload.floor_id)
-        .first()
-    )
-    if not floor:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Floor not found",
+    try:
+        floor = (
+            db.query(Floor)
+            .filter(Floor.id == payload.floor_id)
+            .first()
         )
+        if not floor:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Floor not found",
+            )
 
-    # Check if floor already has a department (Enforce 1:1)
-    existing_on_floor = (
-        db.query(Department)
-        .filter(Department.floor_id == payload.floor_id)
-        .first()
-    )
-    if existing_on_floor:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Floor {floor.number} already has a department: {existing_on_floor.name}",
-        )
-
-    existing = (
-        db.query(Department)
-        .filter(Department.name == payload.name)
-        .first()
-    )
-    if existing:
-        # If the department exists, check if it's already on this floor
-        if existing.floor_id == payload.floor_id:
-            return existing
-        
-        # If it's on a different floor, we "move" it or re-associate it
-        # Step 1: Check if the target floor ALREADY has a DIFFERENT department
+        # Check if floor already has a department (Enforce 1:1)
         existing_on_floor = (
             db.query(Department)
             .filter(Department.floor_id == payload.floor_id)
-            .filter(Department.id != existing.id)
             .first()
         )
         if existing_on_floor:
-             raise HTTPException(
+            raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Floor {floor.number} already has a department: {existing_on_floor.name}. A floor can only have one department.",
+                detail=f"Floor {floor.number} already has a department: {existing_on_floor.name}",
             )
-        
-        # Step 2: Update the department's floor
-        existing.floor_id = payload.floor_id
-        dept = existing
-    else:
-        # Create new department
-        dept = Department(
-            id=str(uuid.uuid4()),
-            name=payload.name,
-            floor_id=floor.id,
-        )
-        db.add(dept)
-    
-    # Update all desks on this floor to this department
-    db.query(Desk).filter(Desk.floor_id == floor.id).update({"department_id": dept.id})
 
-    try:
+        existing = (
+            db.query(Department)
+            .filter(Department.name == payload.name)
+            .first()
+        )
+        
+        if existing:
+            # If the department exists, we check if it's already on this floor (handled by check above mostly)
+            # If it's on a different floor, we "move" it
+            existing.floor_id = payload.floor_id
+            dept = existing
+        else:
+            # Create new department
+            dept = Department(
+                id=str(uuid.uuid4()),
+                name=payload.name,
+                floor_id=floor.id,
+            )
+            db.add(dept)
+        
+        # Flush here to ensure the Department exists in the DB before we try to link Desks to it
+        # This prevents Foreign Key constraint violations in MySQL
+        db.flush()
+        
+        # Update all desks on this floor to this department
+        db.query(Desk).filter(Desk.floor_id == floor.id).update({"department_id": dept.id})
+
         db.commit()
         db.refresh(dept)
         return dept
+        
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
+        # Log the error for debugging
+        print(f"Error in create_department: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Database error: {str(e)}"
