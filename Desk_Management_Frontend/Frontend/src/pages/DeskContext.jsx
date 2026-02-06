@@ -11,6 +11,18 @@ const DeskProvider = ({ children }) => {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
 
+
+  // Helper to handle 401s globally
+  const handleUnauthorized = (response) => {
+    if (response.status === 401) {
+      toast.error("Session expired. Please login again.");
+      localStorage.clear();
+      window.location.href = "/login";
+      return true;
+    }
+    return false;
+  };
+
   const fetchDesks = async () => {
     try {
       const token = localStorage.getItem("token");
@@ -19,6 +31,9 @@ const DeskProvider = ({ children }) => {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      if (handleUnauthorized(response)) return;
+
       const data = await response.json();
       if (response.ok) {
         setDesks(data.data || []);
@@ -38,6 +53,9 @@ const DeskProvider = ({ children }) => {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      if (handleUnauthorized(response)) return;
+
       const data = await response.json();
       if (response.ok) {
         setEmployees(data);
@@ -55,6 +73,9 @@ const DeskProvider = ({ children }) => {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      if (handleUnauthorized(response)) return;
+
       const data = await response.json();
       if (response.ok) {
         setAssignments(data.data || []);
@@ -73,6 +94,9 @@ const DeskProvider = ({ children }) => {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      if (handleUnauthorized(response)) return [];
+
       const data = await response.json();
       if (response.ok) {
         setDeskRequests(Array.isArray(data) ? data : []);
@@ -94,6 +118,9 @@ const DeskProvider = ({ children }) => {
           Authorization: `Bearer ${token}`,
         },
       });
+
+      if (handleUnauthorized(response)) return [];
+
       const data = await response.json();
       if (response.ok) {
         setMyDeskRequests(Array.isArray(data) ? data : []);
@@ -129,6 +156,8 @@ const DeskProvider = ({ children }) => {
         body: JSON.stringify(assignmentData),
       });
 
+      if (handleUnauthorized(response)) return false;
+
       const data = await response.json();
 
       if (!response.ok) {
@@ -161,6 +190,8 @@ const DeskProvider = ({ children }) => {
           ...additionalData
         }),
       });
+
+      if (handleUnauthorized(response)) return false;
 
       const data = await response.json();
 
@@ -196,6 +227,8 @@ const DeskProvider = ({ children }) => {
         },
         body: JSON.stringify(requestData),
       });
+
+      if (handleUnauthorized(response)) return null;
 
       const data = await response.json();
 
